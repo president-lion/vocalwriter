@@ -29,7 +29,7 @@ class NoteAnnouncements(unittest.TestCase):
         return SimpleNamespace(
             notes=[studio.Note(pitch=pitch, beats=beats)],
             selected=lambda: [0], signature=lambda: (4, 4),
-            brush=studio.SIXTEENTH,
+            brush=studio.SIXTEENTH, snap=False,
             list=object(), touch=Mock(), refresh_row=Mock(),
             sync_lengths=Mock(), preview_note=Mock(), announce_note=Mock())
 

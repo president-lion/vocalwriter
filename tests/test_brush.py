@@ -83,12 +83,63 @@ class SteppedLength(unittest.TestCase):
                          studio.MIN_BEATS)
 
 
+class Snapping(unittest.TestCase):
+    """Land on the brush's own grid rather than adding to what is there."""
+
+    def walk(self, start, step, presses, up=True, snap=True):
+        """The lengths a run of presses gives, in beats."""
+        out, beats = [], start
+        for _ in range(presses):
+            beats = studio.stepped_length(beats, up, step, snap)
+            if beats is None:
+                out.append(None)
+                break
+            out.append(beats)
+        return out
+
+    def test_an_eighth_brush_draws_eighths_from_wherever_it_starts(self):
+        # a sixteenth, then the eighth brush: without snapping this walks
+        # 0.75, 1.25, 1.75 -- an eighth grid a sixteenth out, for ever
+        self.assertEqual(self.walk(0.25, 0.5, 3), [0.5, 1.0, 1.5])
+
+    def test_and_without_snapping_it_does_not(self):
+        self.assertEqual(self.walk(0.25, 0.5, 3, snap=False),
+                         [0.75, 1.25, 1.75])
+
+    def test_a_note_already_on_the_grid_moves_one_line(self):
+        self.assertEqual(self.walk(0.5, 0.5, 3), [1.0, 1.5, 2.0])
+
+    def test_going_back_down_lands_on_the_lines_too(self):
+        self.assertEqual(self.walk(1.75, 0.5, 3, up=False), [1.5, 1.0, 0.5])
+
+    def test_the_line_below_the_floor_is_refused_not_clamped(self):
+        self.assertEqual(self.walk(0.5, 0.5, 2, up=False), [None])
+
+    def test_a_triplet_brush_snaps_to_thirds(self):
+        got = self.walk(0.25, studio.BRUSHES['9'], 3)
+        self.assertEqual([studio.spoken_length(b, (4, 4)) for b in got],
+                         ['eighth triplet note', 'quarter triplet note',
+                          'quarter note'])
+
+    def test_a_note_written_as_a_triplet_is_treated_as_on_the_line(self):
+        # 1/3 kept to six places is 0.999999 of a step when the sum is done
+        # again, and must move on rather than back on to where it already is
+        step = studio.BRUSHES['9']
+        self.assertAlmostEqual(
+            studio.stepped_length(round(step, 6), True, step, True), 2 * step,
+            places=5)
+
+    def test_the_whole_note_brush_from_a_sixteenth(self):
+        self.assertEqual(self.walk(0.25, 4.0, 2), [4.0, 8.0])
+
+
 class NudgingUsesTheBrush(unittest.TestCase):
-    def editor(self, brush, beats=0.25, notes=1):
+    def editor(self, brush, beats=0.25, notes=1, snap=False):
         return SimpleNamespace(
             notes=[studio.Note(pitch=60, beats=beats) for _ in range(notes)],
             selected=lambda: list(range(notes)), signature=lambda: (4, 4),
-            brush=brush, list=object(), touch=Mock(), refresh_row=Mock(),
+            brush=brush, snap=snap, list=object(), touch=Mock(),
+            refresh_row=Mock(),
             sync_lengths=Mock(), preview_note=Mock(), announce_note=Mock())
 
     def test_a_whole_note_brush_adds_a_whole_note(self):

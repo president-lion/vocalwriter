@@ -74,6 +74,7 @@ ID_UP, ID_DOWN, ID_LONGER, ID_SHORTER = (wx.NewIdRef() for _ in range(4))
 ID_PLAY, ID_HEAR, ID_STOP, ID_KEYS = (wx.NewIdRef() for _ in range(4))
 ID_ADD_REST, ID_IMPORT, ID_EXPORT = (wx.NewIdRef() for _ in range(3))
 ID_AUTO_PREVIEW = wx.NewIdRef()
+ID_SNAP = wx.NewIdRef()
 ID_EXPORT_TRACKS = wx.NewIdRef()
 ID_BAR_REST, ID_GOTO_BAR, ID_METRONOME = (wx.NewIdRef() for _ in range(3))
 ID_PLAY_PAUSE, ID_PLAY_HERE, ID_PANES = (wx.NewIdRef() for _ in range(3))
@@ -232,15 +233,40 @@ def reannounce(listctrl, row):
         pass
 
 
-def stepped_length(beats, up, step=SIXTEENTH):
+#: How close to a grid line counts as being on it, as a fraction of the step.
+#: Lengths are kept to six decimal places and a triplet is a third, so a note
+#: written as exactly one triplet is 0.999999 of one when the arithmetic is
+#: done again -- near enough that a press must move it on to the next line
+#: rather than back on to the one it is already sitting on.
+ON_THE_LINE = 1e-4
+
+
+def stepped_length(beats, up, step=SIXTEENTH, snap=False):
     """One brushful longer or shorter, or None if that is too short.
 
-    Exactly one, from wherever the note is now. Nothing is rounded and nothing
-    is clamped: a step that would leave the note shorter than the floor is
-    refused outright rather than made smaller to fit, because a press that
-    moves less than the others is what made this feel unreliable.
+    Without `snap`, exactly one brushful from wherever the note is now:
+    an eighth-note brush on a note of a sixteenth gives three sixteenths,
+    because a sixteenth and an eighth is three sixteenths.
+
+    With it, the next line of the brush's own grid instead. The same press on
+    the same note gives an eighth, then a quarter, then three eighths -- the
+    lengths an eighth-note brush draws -- rather than everything a sixteenth
+    out from them for the rest of the note's life. Which of the two is wanted
+    depends on whether the brush is being used to *adjust* a length or to
+    *choose* one, so it is a setting rather than a decision.
+
+    Nothing is clamped either way: a step that would leave the note shorter
+    than the floor is refused outright rather than made smaller to fit,
+    because a press that moves less than the others is what made this feel
+    unreliable.
     """
-    want = beats + (step if up else -step)
+    if snap:
+        lines = beats / step
+        n = (math.floor(lines + ON_THE_LINE) + 1 if up
+             else math.ceil(lines - ON_THE_LINE) - 1)
+        want = n * step
+    else:
+        want = beats + (step if up else -step)
     if want < MIN_BEATS - 1e-9:
         return None
     return round(want, 6)
@@ -754,7 +780,7 @@ class AddWordDialog(wx.Dialog):
                 message = pitch_name(n.pitch)
             else:
                 want = stepped_length(n.beats, code == wx.WXK_RIGHT,
-                                      self.studio.brush)
+                                      self.studio.brush, self.studio.snap)
                 if want is None:
                     self.studio.announce_note(
                         '%s, the shortest a nudge will make it'
@@ -1599,6 +1625,9 @@ class Frame(wx.Frame):
         #: just now, not something about the music -- so it is kept with the
         #: other one of those and is there again next time.
         self.brush = brush_beats(self.settings.get('brush'))
+        #: whether a brushful lands on the brush's grid or is added to what is
+        #: there. See `stepped_length`.
+        self.snap = bool(self.settings.get('snap', True))
         #: the pending count of what is selected, and what was last counted,
         #: so that holding Shift down a phrase says the total once at the end
         #: rather than every number on the way to it
@@ -1815,6 +1844,11 @@ class Frame(wx.Frame):
             ID_AUTO_PREVIEW, '&Preview notes as they change\tCtrl+Shift+P',
             'Hear a note whenever its pitch or length is nudged')
         self.mi_auto_preview.Check(bool(self.settings.get('auto_preview')))
+        self.mi_snap = prefs.AppendCheckItem(
+            ID_SNAP, '&Snap lengths to the grid\tCtrl+Shift+G',
+            'Alt with the arrows lands on the brush\'s own grid rather than '
+            'adding a brushful to what is there')
+        self.mi_snap.Check(bool(self.settings.get('snap', True)))
         bar.Append(prefs, '&Settings')
         bar.Append(help_, '&Help')
         self.SetMenuBar(bar)
@@ -1860,6 +1894,7 @@ class Frame(wx.Frame):
                                (ID_EXPORT_TRACKS, self.on_export_tracks),
                                (wx.ID_PREFERENCES, self.on_song_settings),
                                (ID_AUTO_PREVIEW, self.on_auto_preview),
+                               (ID_SNAP, self.on_snap),
                                (wx.ID_EXIT, lambda e: self.Close())):
             self.Bind(wx.EVT_MENU, handler, id=ident)
 
@@ -1913,6 +1948,22 @@ class Frame(wx.Frame):
                 self.say('consonants %s the beat'
                          % ('before' if self.anticipate else 'after'))
         dlg.Destroy()
+
+    def on_snap(self, _evt):
+        """Ctrl+Shift+G: land on the grid, or add to what is there.
+
+        Said out loud for the same reason the brush is: pressing it changes
+        nothing you can see, and what it changes is what the *next* press of
+        Alt and an arrow will do.
+        """
+        on = self.mi_snap.IsChecked()
+        self.snap = on
+        self.settings['snap'] = on
+        kept = settings.save(self.settings)
+        self.announce_state(
+            'snap %s%s' % ('on' if on else 'off',
+                           '' if kept else ', for this sitting only: the '
+                           'settings file could not be written'), self.list)
 
     def on_auto_preview(self, _evt):
         """A setting of the program, not of the song: it is how you like to
@@ -1976,6 +2027,9 @@ class Frame(wx.Frame):
                      'consonant length, the reverb, and the voice controls '
                      'every part follows unless it has its own',
                      'Ctrl+Shift+P  hear a note whenever it is nudged',
+                     'Ctrl+Shift+G  snap lengths to the grid: on, Alt and an '
+                     'arrow lands on the brush\'s own lengths; off, it adds '
+                     'a brushful to whatever the note is',
                      'Shift with the arrow keys selects more than one note',
                      'Left or Right on a note  the part before or after this '
                      'one, without leaving the notes',
@@ -2575,7 +2629,7 @@ class Frame(wx.Frame):
         moved = 0
         for i in rows:
             n = self.notes[i]
-            want = stepped_length(n.beats, up, self.brush)
+            want = stepped_length(n.beats, up, self.brush, self.snap)
             if want is None:
                 continue
             n.beats = want

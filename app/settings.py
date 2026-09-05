@@ -20,6 +20,12 @@ DEFAULTS = {
     #: preview a note as it is nudged, so pitch and length can be heard
     #: rather than read
     'auto_preview': False,
+    #: what Alt with the arrow keys adds and takes away, in beats. A quarter
+    #: of a beat is a sixteenth note, which is what it has always been.
+    'brush': 0.25,
+    #: land on the grid the brush describes, rather than adding a brushful to
+    #: whatever length the note happens to have
+    'snap': True,
 }
 
 
@@ -41,7 +47,15 @@ def path():
 
 
 def load():
-    """The settings, with anything missing filled in from the defaults."""
+    """The settings, with anything missing filled in from the defaults.
+
+    Only the keys named in DEFAULTS come back, and only where what is in the
+    file is the same kind of thing as the default. A key saved by a newer
+    version of the program, or by a typo, is dropped rather than carried
+    around -- which also means a setting that is not in DEFAULTS is written
+    and then silently forgotten on the next start, so anything worth keeping
+    belongs up there.
+    """
     out = dict(DEFAULTS)
     try:
         with open(path(), encoding='utf-8') as fh:
