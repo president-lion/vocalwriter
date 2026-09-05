@@ -246,7 +246,7 @@ def load(path):
         raise ValueError('not a VocalWriter Studio project')
     parts = doc.get('tracks')
     if not parts:
-        parts = [{'name': 'Voice 1', 'program': doc.get('program', 0),
+        parts = [{'name': '1', 'program': doc.get('program', 0),
                   'notes': doc.get('notes') or []}]
     tracks = [_read_track(part, i) for i, part in enumerate(parts)]
     sig = doc.get('time_signature') or DEFAULT_SIG
@@ -269,7 +269,7 @@ def _read_track(doc, index=0):
         con = None if con is None else float(con)
     except (TypeError, ValueError):
         con = None
-    return {'name': doc.get('name') or ('Voice %d' % (index + 1)),
+    return {'name': doc.get('name') or str(index + 1),
             'voice_id': (_int(doc['voice_id'], 0)
                          if doc.get('voice_id') is not None else None),
             'voice': (clean_voice(doc['voice']) if 'voice' in doc else None),

@@ -42,8 +42,21 @@ from ppc.song import parse_pitch                             # noqa: E402
 SHARP = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 COLUMNS = (('Phonemes', 165), ('Pitch', 55), ('Beats', 150), ('Word', 95),
            ('Bend', 90), ('Bar', 55))
-TRACK_COLUMNS = (('Track', 150), ('Voice', 120), ('Volume', 70),
-                 ('Pan', 90), ('State', 90))
+#: A track is what it is called, what it sings with, and whether it can be
+#: heard. Its volume and its pan were columns here too, until the list was
+#: listened to rather than looked at: a screen reader reads every column of the
+#: row it lands on, so two numbers nobody had asked for were spoken on every
+#: press of an arrow key. They are a keypress away in the track dialog, which
+#: is where they are set.
+#:
+#: The second column carries no heading, because the heading is read before the
+#: value: "Voice 1, Voice: Robert" said the word twice for one fact. Of two
+#: columns, one of them a name, which is which needs no label.
+TRACK_COLUMNS = (('Track', 200), ('', 140))
+
+#: what S and M leave a track as, which is the whole of what they say
+TOGGLE_WORDS = {('solo', True): 'soloed', ('solo', False): 'unsoloed',
+                ('mute', True): 'muted', ('mute', False): 'unmuted'}
 DEFAULT_PITCH = 60
 DEFAULT_BEATS = 0.5
 
@@ -1119,7 +1132,7 @@ class Frame(wx.Frame):
                           size=(720, 560))
         #: Every part of the song. There is always at least one: a song
         #: with no tracks has nowhere to put a note.
-        self.tracks = [project.Track(name='Voice 1')]
+        self.tracks = [project.Track(name='1')]
         #: The song's tempo, its time signature, its consonant length as a
         #: percentage, and the engine's voice controls. All of it lives in the
         #: song settings dialog rather than the main window: it is set once for
@@ -1557,6 +1570,30 @@ class Frame(wx.Frame):
             wx.LogWarning('Screen reader announcement failed: %s' % error)
         reannounce(control, row)
 
+    def announce_state(self, text, control=None, row=-1):
+        """Speak a change that is on no row: the metronome, or a failure.
+
+        The same notification `announce_note` raises, and raised on a list for
+        the same reason it is raised on one there: the window itself is not a
+        provider UI Automation will take -- `UiaProviderFromIAccessible`
+        refuses a frame -- and a list inside the window is. What is spoken has
+        nothing to do with the list; the list is only what has a voice.
+
+        `row` is for a caller with a row to fall back to. The metronome has
+        none, and where there is no screen reader this stays what it always
+        was: a line in the status bar.
+        """
+        self.say(text)
+        control = control if control is not None else self.list
+        try:
+            if announce(control, text):
+                return True
+        except Exception as error:
+            wx.LogWarning('Screen reader announcement failed: %s' % error)
+        if row >= 0:
+            reannounce(control, row)
+        return False
+
     def _ready(self, info):
         info = info or {}
         self.say('engine ready: %s, Python %s, %s voices'
@@ -1611,33 +1648,38 @@ class Frame(wx.Frame):
         return [r for r in self.palette if r[0] != REST]
 
     def _engine_error(self, msg):
-        wx.CallAfter(self.say, 'engine error: %s' % msg)
+        """A request that failed, said out loud.
+
+        This is the one message nobody can afford to miss and the one the
+        status bar was worst at: when the synthesiser cannot be opened at all
+        every render fails, and what that looks like from the keyboard is a
+        program that has quietly stopped making sound.
+        """
+        wx.CallAfter(self.announce_state, 'engine error: %s' % msg)
 
     # -- tracks ------------------------------------------------------------
 
     def track_state(self, t):
-        """What the State column says: on, muted, soloed, or silenced by one.
+        """"muted", "soloed", or nothing at all.
 
-        A track that is neither muted nor soloed is still silent while some
-        other track is soloed, and that is worth saying outright -- otherwise
-        a track reading "on" that cannot be heard looks like a fault.
+        A track that can be heard says nothing: a list where every row says
+        "on" is a list that says nothing while taking time to say it. The two
+        words left are the two that mean this row is not like the others.
+
+        Soloing one track silences the rest, and the rest say so -- they read
+        "muted", which is what has happened to them, rather than a third word
+        for the same silence. What matters is whether it will be heard, not
+        which key did it.
         """
-        bits = []
-        if t.solo:
-            bits.append('solo')
-        if t.mute:
-            bits.append('muted')
-        if not bits and any(x.solo and not x.mute for x in self.tracks):
-            bits.append('silent')
-        return ', '.join(bits) or 'on'
+        if t not in project.audible(self.tracks):
+            return 'muted'
+        return 'soloed' if t.solo else ''
 
     def refresh_track(self, i):
         t = self.tracks[i]
-        self.tracks_list.SetItem(i, 0, t.name)
+        self.tracks_list.SetItem(
+            i, 0, ('%s %s' % (t.name, self.track_state(t))).strip())
         self.tracks_list.SetItem(i, 1, self.voice_name(self.track_voice(t)))
-        self.tracks_list.SetItem(i, 2, '%d%%' % t.volume)
-        self.tracks_list.SetItem(i, 3, project.pan_text(t.pan))
-        self.tracks_list.SetItem(i, 4, self.track_state(t))
 
     def sync_tracks(self, select=None):
         self._switching = True             # our own selecting is not a choice
@@ -1670,10 +1712,9 @@ class Frame(wx.Frame):
         t = self.track
         relabel(self.list, 'Notes in %s' % t.name)
         self.sync(select=t.cursor)
-        self.say('%s, %s, %d note%s, %s'
+        self.say('%s, %s, %d note%s'
                  % (t.name, self.voice_name(self.track_voice(t)),
-                    len(t.notes),
-                    '' if len(t.notes) == 1 else 's', self.track_state(t)))
+                    len(t.notes), '' if len(t.notes) == 1 else 's'))
 
     def on_track_key(self, evt):
         code = evt.GetKeyCode()
@@ -1702,7 +1743,15 @@ class Frame(wx.Frame):
         """S and M on a track: solo it, or mute it.
 
         Every row is redrawn, not just this one, because soloing a track is a
-        statement about all the others as well.
+        statement about all the others as well -- they read "muted", which is
+        what soloing has done to them.
+
+        One word is said, and the word is the state the track is now in. You
+        pressed the key: you know which track you pressed it on and you know
+        you pressed it, so a sentence naming both back to you is a sentence to
+        sit through on every press. It is said aloud rather than left in the
+        status bar because this can also be done from the Track menu, where
+        the list is not focused and its rows are not read at all.
         """
         i = self.track_at()
         t = self.tracks[i]
@@ -1710,17 +1759,22 @@ class Frame(wx.Frame):
         self.touch()
         for k in range(len(self.tracks)):
             self.refresh_track(k)
-        reannounce(self.tracks_list, i)
-        self.say('%s %s%s' % (t.name, '' if getattr(t, field) else 'not ',
-                              'soloed' if field == 'solo' else 'muted'))
+        self.announce_state(TOGGLE_WORDS[(field, getattr(t, field))],
+                            self.tracks_list, i)
 
     def track_name(self):
-        """A name not already in use, so two tracks never read the same."""
+        """A name not already in use, so two tracks never read the same.
+
+        A number, and nothing else. It was "Voice 1", which read as "Voice 1,
+        Voice: Robert" -- the word twice in one row, once as half a name and
+        once as the thing the name sat next to. The number is what anyone
+        calls it anyway, and a part with a real name is a rename away.
+        """
         taken = {t.name for t in self.tracks}
         n = len(self.tracks) + 1
-        while ('Voice %d' % n) in taken:
+        while str(n) in taken:
             n += 1
-        return 'Voice %d' % n
+        return str(n)
 
     @undoable('add track')
     def on_track_new(self, _evt):
@@ -2281,13 +2335,16 @@ class Frame(wx.Frame):
         return song
 
     def on_metronome(self, _evt):
-        if not self.mi_metronome.IsChecked():
-            self.say('metronome off')
-            return
-        self.say('metronome on, %s, %g beats to the bar. It ticks along with '
-                 'Play and is never written into an exported file.'
-                 % (project.format_sig(self.signature()),
-                    project.bar_beats(self.signature())))
+        """Ctrl+M, which nothing else answers.
+
+        A checked menu item says whether it is checked when it is walked past
+        in the menu, and says nothing at all when the shortcut is used from
+        the notes -- which is when it is actually used. Two words, because two
+        words is the whole of what changed; what the metronome is and what it
+        does is in the help, said once, rather than on every press.
+        """
+        self.announce_state('metronome on' if self.mi_metronome.IsChecked()
+                            else 'metronome off')
 
     def on_hear(self, _evt):
         """Render only the selected note -- far quicker than the whole line."""
@@ -2417,11 +2474,12 @@ class Frame(wx.Frame):
         """
         audio = (res or {}).get('audio')
         if audio is None or not len(audio):
-            self.say('there is no audio to play')
+            self.announce_state('there is no audio to play')
             return
         if not self.player.play(audio, res.get('rate', 44100)):
-            self.say('cannot play: no sound output this program knows how to '
-                     'open. Exporting to a WAV still works.')
+            self.announce_state(
+                'cannot play: no sound output this program knows how to '
+                'open. Exporting to a WAV still works.')
 
     def stop_audio(self, ring=False):
         """Stop the sound. With `ring`, let the room it was sung in carry on.
@@ -2744,7 +2802,7 @@ class Frame(wx.Frame):
                    for ph, pitch, beats, word, bend in t['rows']])
             for t in tracks]
         if not self.tracks:
-            self.tracks = [project.Track(name='Voice 1')]
+            self.tracks = [project.Track(name='1')]
         self.bpm = max(30, min(250, int(round(bpm))))
         if sig:
             self.sig = project.parse_sig(project.format_sig(sig))
@@ -2762,7 +2820,7 @@ class Frame(wx.Frame):
     def on_new(self, _evt):
         if not self.may_discard('Start a new song'):
             return
-        self.tracks = [project.Track(name='Voice 1',
+        self.tracks = [project.Track(name='1',
                                      program=self.track.program)]
         self.path = None
         self.sync_tracks(select=0)
