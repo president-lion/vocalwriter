@@ -194,6 +194,28 @@ def glide(points, step=BEND_STEP):
     return out
 
 
+def in_time_order(points):
+    """Bend points in the order they happen, and where two happen at the same
+    instant, in the order they were written down.
+
+    Sorting them by the whole triple instead put them in order of time and
+    then of *pitch*, which is not an order at all -- and two bend points do
+    land at the same instant, routinely: a note whose bend runs to the end of
+    it has its last point exactly where the next note begins, and the next
+    note asks for a zero there to stop the bend carrying on into it (see
+    project.timeline). Sorted by value, that zero came first, and everything
+    followed from it: the slide into the last point now ran to zero instead
+    of to where it was written, so a note bent up to a question sang its way
+    down instead -- and the value it should have ended on was left in force
+    with nothing after it to clear it, so the next note held it, and the note
+    after that, for as long as no other bend was written.
+
+    It only showed up when a note was added *after* the bent one, because
+    until then there was no zero to sort in front of anything.
+    """
+    return sorted(_triples(points), key=lambda pt: pt[0])
+
+
 def _triples(points):
     """Accept points with or without the slide flag; without it, they hold."""
     for pt in points:
@@ -862,7 +884,7 @@ class Engine(object):
             except (TypeError, ValueError):
                 pass
         # [(beat, semitones, slides into the next)], in the song's own time
-        bends = sorted(_triples(track.get('bends') or []))
+        bends = in_time_order(track.get('bends') or [])
         # A part sung a shade sharp or flat, and a shade early or late. Two
         # voices in perfect tune and perfect time are one voice twice as loud;
         # a few cents and a few milliseconds apart is what two singers are.
