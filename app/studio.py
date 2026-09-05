@@ -2028,9 +2028,30 @@ class Frame(wx.Frame):
             self.Bind(wx.EVT_MENU, handler, id=ident)
 
     def on_playback_shortcut(self, evt):
-        """Play directly, without a native menu activation announcement."""
+        """Keys the window takes before the control under them sees them.
+
+        Play, so that a menu accelerator does not announce itself first --
+        and Enter with a modifier held, which is a different problem with the
+        same answer.
+
+        A list row raises an activation of its own on Enter, and the native
+        control does that whatever else is held down at the time. Reading a
+        modifier off it afterwards is not possible: an activation says which
+        row, and nothing about the keyboard. Caught here, before the list has
+        had it, Shift and Alt mean what they are meant to mean and plain Enter
+        goes through to the list to activate the row as it always did.
+        """
         code = evt.GetKeyCode()
         mac = sys.platform == 'darwin'
+        if code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) \
+                and wx.Window.FindFocus() is self.list \
+                and not evt.CmdDown():
+            if evt.ShiftDown() and not evt.AltDown():
+                self.on_word_over(None)
+                return
+            if evt.AltDown() and not evt.ShiftDown():
+                self.on_envelope(None)
+                return
         if evt.ShiftDown() or (mac and evt.RawControlDown()):
             evt.Skip()
             return
@@ -2377,8 +2398,15 @@ class Frame(wx.Frame):
             self.toggle_track('mute')
         elif code in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE):
             self.on_track_remove(None)
-        elif code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+        elif code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) and plain:
             self.on_track_edit(None)       # not skipped: one dialog, not two
+        elif code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) and evt.ShiftDown():
+            # the same key on a note looks a word up; here there is no note to
+            # put one on, and opening the track dialog instead of saying so is
+            # how a wrong window comes to be open with no idea why
+            self.announce_state(
+                'a word goes on notes. F6 moves to the notes list',
+                self.tracks_list)
         else:
             evt.Skip()
 
@@ -2736,7 +2764,7 @@ class Frame(wx.Frame):
     def nudge_pitch(self, by):
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         for i in rows:
             n = self.notes[i]
@@ -2770,7 +2798,7 @@ class Frame(wx.Frame):
         """Move the selected note one brushful longer or shorter."""
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         moved = 0
         for i in rows:
@@ -2821,7 +2849,7 @@ class Frame(wx.Frame):
         """
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         if (delta < 0 and rows[0] == 0) or \
            (delta > 0 and rows[-1] == len(self.notes) - 1):
@@ -2873,7 +2901,7 @@ class Frame(wx.Frame):
     def on_copy(self, _evt):
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         picked = [self.notes[i] for i in rows]
         if not self.to_clipboard(project.to_clipboard(picked)):
@@ -2885,7 +2913,7 @@ class Frame(wx.Frame):
     def on_cut(self, _evt):
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         self.on_copy(None)
         for i in reversed(rows):
@@ -2942,7 +2970,7 @@ class Frame(wx.Frame):
         """
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         note = self.notes[rows[0]]
         self.say('pitch bend envelope for %s, %s'
@@ -2979,7 +3007,7 @@ class Frame(wx.Frame):
         """
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         over = [self.notes[i] for i in rows]
         with AddWordDialog(self, self, over[0].pitch, over[0].beats,
@@ -3040,7 +3068,7 @@ class Frame(wx.Frame):
     def on_edit(self, _evt):
         i = self.selection()
         if i < 0:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         with NoteDialog(self, self, self.notes[i]) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
@@ -3055,7 +3083,7 @@ class Frame(wx.Frame):
     def on_remove(self, _evt):
         rows = self.selected()
         if not rows:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         gone = [self.notes[i] for i in rows]
         for i in reversed(rows):
@@ -3156,7 +3184,7 @@ class Frame(wx.Frame):
         """Render only the selected note -- far quicker than the whole line."""
         i = self.selection()
         if i < 0:
-            self.say('select a note first')
+            self.announce_state('select a note first', self.list)
             return
         if self.rendering:
             self.say('already rendering')

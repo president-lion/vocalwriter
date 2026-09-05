@@ -40,7 +40,7 @@ class WordOverNotes(unittest.TestCase):
         return SimpleNamespace(
             notes=notes, selected=lambda: chosen, list=object(),
             say=Mock(), touch=Mock(), sync_lengths=Mock(),
-            announce_note=Mock())
+            announce_note=Mock(), announce_state=Mock())
 
     def written(self, *groups):
         return [studio.Note(g, 0, 0, w) for g, w in groups]
@@ -101,7 +101,8 @@ class WordOverNotes(unittest.TestCase):
         frame = self.editor([studio.Note(['%'], 60, 0.25)], rows=[])
         self.run_it(frame, self.written((['x'], 'x')))
         frame.touch.assert_not_called()
-        self.assertIn('select a note', frame.say.call_args[0][0])
+        self.assertIn('select a note',
+                      frame.announce_state.call_args[0][0])
 
     def test_cancelling_changes_nothing(self):
         notes = [studio.Note(['%'], 60, 0.25)]
