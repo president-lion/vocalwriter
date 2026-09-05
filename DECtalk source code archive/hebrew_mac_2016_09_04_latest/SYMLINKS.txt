@@ -8,3 +8,11 @@ anything inside the archive.
     hebrew/testtts/App/ios/CoronaEnterprise   -> /Applications/CoronaEnterprise
 
 The iOS projects under those directories expect the SDK to be reachable there.
+
+One directory here, hebrew/dectalk, is a git checkout of its own: a small
+Xcode wrapper that someone version-controlled in place. Its .git has been
+renamed to dot-git, because git will not commit the files of a directory that
+looks like another repository -- it recorded the whole thing as a submodule
+with no URL instead, which left all fifteen of its files out and broke
+`git submodule update` for the rest of the project. The history in dot-git is
+one commit, "Initial Commit", and nothing has been taken out of it.
