@@ -226,7 +226,17 @@ def bend_events(points, t0, t1, detune=0.0):
 
 
 def _raw(semitones):
-    """Semitones as the 14-bit number Speech_PitchBend is given."""
+    """Semitones as the 14-bit number Speech_PitchBend is given.
+
+    No correction for the engine's pitch grid here, which was tried and put
+    back. A bend that is *moving* does not need one: measured on a note bent a
+    whole tone across three seconds, the pitch follows the line it is written
+    as to within half a cent, mean error a tenth of one -- the engine is given
+    a new value every frame and does not simply sit on the step below. Adding
+    half a step made that worse rather than better, +0.49 cents mean against
+    +0.10. It is a standing offset that needs it, and `_track` adds it to the
+    detune, which is the only one there is.
+    """
     v = int(round(semitones / BEND_RANGE * 8192))
     return max(-8192, min(8191, v))
 

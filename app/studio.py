@@ -101,6 +101,22 @@ NOTE_VALUES = {
     1.5: 'dotted quarter', 1.0: 'quarter', 0.75: 'dotted eighth',
     0.5: 'eighth', 0.375: 'dotted sixteenth', 0.25: 'sixteenth',
     0.125: 'thirty-second',
+    # Three of a triplet fill the note above it: three quarter triplets to a
+    # half, three eighth triplets to a quarter, three sixteenth triplets to an
+    # eighth. They are here so that a note made with one is read back by name
+    # rather than as "0.666667 beats".
+    2.0 / 3.0: 'quarter triplet', 1.0 / 3.0: 'eighth triplet',
+    1.0 / 6.0: 'sixteenth triplet',
+}
+
+#: The brush: which length Alt with the arrow keys adds and takes away, and
+#: the number key that picks it. Editing in sixteenths for ever is fine until
+#: the note wanted is a whole one, or a triplet, and then it is twelve presses
+#: and an arithmetic problem. The order is the user's own -- the common
+#: lengths are on the keys they are quickest to reach.
+BRUSHES = {
+    '1': 4.0, '2': 2.0, '3': 0.125, '4': 1.0, '5': 2.0 / 3.0,
+    '6': 0.25, '7': 1.0 / 6.0, '8': 0.5, '9': 1.0 / 3.0,
 }
 
 
@@ -114,6 +130,20 @@ def note_value(beats):
 #: The phoneme that is silence. A note holding nothing else is a rest: it is
 #: not sung, it is the gap the phrases either side of it are placed around.
 REST = '%'
+
+
+#: As far as a marker may be put from the written pitch. The engine is set up
+#: for twelve either way (ppc.engine.BEND_RANGE); an octave is more than any
+#: voice does and stops a typing slip singing something inaudible.
+BEND_LIMIT = 12.0
+
+
+def semitone_text(value):
+    """A bend value as it is said: "plus 2", "minus 0.5", "on the note"."""
+    value = round(float(value), 3)
+    if abs(value) < 1e-3:
+        return 'on the note'
+    return '%s %g' % ('plus' if value > 0 else 'minus', abs(value))
 
 
 def bend_text(value):
@@ -186,18 +216,48 @@ def reannounce(listctrl, row):
         pass
 
 
-def stepped_length(beats, up):
-    """A sixteenth note longer or shorter, or None if that is too short.
+def stepped_length(beats, up, step=SIXTEENTH):
+    """One brushful longer or shorter, or None if that is too short.
 
-    Exactly one sixteenth, from wherever the note is now. Nothing is rounded and
-    nothing is clamped: a step that would leave the note shorter than the floor
-    is refused outright rather than made smaller to fit, because a press that
+    Exactly one, from wherever the note is now. Nothing is rounded and nothing
+    is clamped: a step that would leave the note shorter than the floor is
+    refused outright rather than made smaller to fit, because a press that
     moves less than the others is what made this feel unreliable.
     """
-    want = beats + (SIXTEENTH if up else -SIXTEENTH)
+    want = beats + (step if up else -step)
     if want < MIN_BEATS - 1e-9:
         return None
     return round(want, 6)
+
+
+def brush_name(beats):
+    """A brush as it is said: "quarter", "sixteenth triplet"."""
+    return note_value(beats) or ('%g beats' % beats)
+
+
+def a_brush(beats):
+    """The same with its article, for the middle of a sentence."""
+    name = brush_name(beats)
+    return '%s %s' % ('an' if name[:1] in 'aeiou' else 'a', name)
+
+
+def brush_key(code):
+    """The number a key press stands for, main row or keypad, or ''."""
+    if ord('1') <= code <= ord('9'):
+        return chr(code)
+    if wx.WXK_NUMPAD1 <= code <= wx.WXK_NUMPAD9:
+        return chr(ord('1') + code - wx.WXK_NUMPAD1)
+    return ''
+
+
+def brush_beats(value, fallback=SIXTEENTH):
+    """A remembered brush, if it is still one this program has."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return next((b for b in BRUSHES.values() if abs(b - value) < 1e-6),
+                fallback)
 
 
 def note_name(beats):
@@ -469,13 +529,23 @@ class AddWordDialog(wx.Dialog):
     boundaries and the division can be moved. VocalWriter's own scores do the
     same thing: their lyrics are typed with hyphens, "Dai-sy", one fragment per
     note, so a hyphen here sets the number of notes to start from.
+
+    `over` is notes that are already written, and turns this from adding notes
+    into putting a word on the ones you have. The dictionary was reachable
+    only while adding, which meant a line whose tune was already right had to
+    be thrown away and typed again to change a word in it. The notes keep
+    their own pitches and lengths -- they are the tune, and the word is being
+    sung to it -- so the length field goes away and the number of notes the
+    word may use cannot exceed the number selected.
     """
 
     def __init__(self, parent, studio, pitch=DEFAULT_PITCH,
-                 beats=DEFAULT_BEATS):
-        wx.Dialog.__init__(self, parent, title='Add word')
+                 beats=DEFAULT_BEATS, over=None):
+        wx.Dialog.__init__(self, parent,
+                           title='Word for these notes' if over else 'Add word')
         self.studio = studio
         self.pitch = pitch
+        self.over = list(over or ())
         self.phonemes = []
         self.rows = []
 
@@ -505,7 +575,11 @@ class AddWordDialog(wx.Dialog):
                                  style=wx.TE_PROCESS_ENTER)
         self.beats.Bind(wx.EVT_TEXT_ENTER, self.on_beats)
         self.beats.Bind(wx.EVT_KILL_FOCUS, self.on_beats)
-        labelled(self, outer, 'Beats', self.beats, hint='for each note')
+        labelled(self, outer, 'Beats', self.beats,
+                 hint=('the notes keep the lengths they have'
+                       if self.over else 'for each note'))
+        if self.over:
+            self.beats.Disable()
 
         self.list = ReportList(self, style=wx.LC_REPORT | wx.LC_SINGLE_SEL,
                                 size=(380, 140))
@@ -550,19 +624,23 @@ class AddWordDialog(wx.Dialog):
             return
         self.phonemes = phones
         parts = phonology.syllabify(phones)
-        self.count.SetRange(1, max(1, len(parts)))
+        most = min(len(parts), len(self.over)) if self.over else len(parts)
+        self.count.SetRange(1, max(1, most))
         # one note per syllable unless the hyphens said otherwise -- that is
         # what singing a word of more than one syllable means, and the spin is
         # right here to collapse it back onto a single note
-        self.count.SetValue(len(parts) if wanted <= 1
-                            else min(wanted, len(parts)))
+        self.count.SetValue(most if wanted <= 1 else min(wanted, most))
         self.build()
         self.hear.Enable()
         if self.ok:
             self.ok.Enable()
-        self.studio.say('%s is %s, %d syllable%s'
-                        % (word, ' '.join(phones), len(parts),
-                           '' if len(parts) == 1 else 's'))
+        said = ('%s is %s, %d syllable%s'
+                % (word, ' '.join(phones), len(parts),
+                   '' if len(parts) == 1 else 's'))
+        if self.over and len(parts) > len(self.over):
+            said += (', more than the %d notes selected, so it is divided '
+                     'into %d' % (len(self.over), most))
+        self.studio.say(said)
         self.count.SetFocus()
 
     def value_beats(self):
@@ -572,12 +650,24 @@ class AddWordDialog(wx.Dialog):
             return DEFAULT_BEATS
 
     def build(self):
-        """Rebuild the notes from the word, the division and the length."""
+        """Rebuild the notes from the word, the division and the length.
+
+        Over notes that already exist the pitch and the length come from them,
+        so what is listed here -- and what Preview plays -- is the line as it
+        will actually sound rather than the same syllable repeated on one
+        pitch.
+        """
         word, _ = self.typed()
         groups = phonology.regroup(self.phonemes, self.count.GetValue())
         b = self.value_beats()
-        self.rows = [Note(g, self.pitch, b, word if i == 0 else '')
-                     for i, g in enumerate(groups)]
+        self.rows = []
+        for i, g in enumerate(groups):
+            on = self.over[i] if i < len(self.over) else None
+            self.rows.append(Note(g,
+                                  on.pitch if on else self.pitch,
+                                  on.beats if on else b,
+                                  word if i == 0 else '',
+                                  list(on.bend) if on else None))
         self.sync()
 
     def sync(self, select=0):
@@ -627,7 +717,8 @@ class AddWordDialog(wx.Dialog):
                 n.pitch = max(0, min(127, n.pitch + step))
                 message = pitch_name(n.pitch)
             else:
-                want = stepped_length(n.beats, code == wx.WXK_RIGHT)
+                want = stepped_length(n.beats, code == wx.WXK_RIGHT,
+                                      self.studio.brush)
                 if want is None:
                     self.studio.announce_note(
                         '%s, the shortest a nudge will make it'
@@ -697,6 +788,238 @@ class PointDialog(wx.Dialog):
                 return fallback
         return (min(1.0, max(0.0, num(self.at, 0.0) / 100.0)),
                 num(self.value, 0.0))
+
+
+class EnvelopeDialog(wx.Dialog):
+    """A note's pitch bend, scrubbed through rather than listed.
+
+    `BendDialog` below is a table of the points, which is the right shape for
+    a curve read in from a MIDI file -- hundreds of points a few milliseconds
+    apart -- and the wrong shape for drawing one. Drawing wants to be *at* a
+    place in the note and say what the pitch does there, which is what this is:
+    a hundred and one positions through the note, one per cent apart, moved
+    between with the arrow keys.
+
+    It is a list and not a slider on purpose. A list row is read out by a
+    screen reader when the focus lands on it, with no help from us, so every
+    step of the scrub says where it is and what the pitch is doing there --
+    and the row is the same text the eye reads. A slider would say only its
+    own number, and would say it over the top of anything we added.
+
+    The positions are whole per cents. A bend written here therefore has at
+    most a hundred and one points in it, which is finer than the ear and finer
+    than the engine, whose pitch moves in steps of about five cents. A curve
+    imported from MIDI can be finer than that in *time*, so opening one here
+    rounds it; the note editor's Pitch bend button is still the way to see one
+    of those exactly, and this says so when it has had to round.
+    """
+
+    #: what each number key jumps to. Nought is the far end, not the near one:
+    #: Home is already the near one, and the row of keys reads as ten, twenty,
+    #: through to a hundred.
+    JUMPS = {'1': 10, '2': 20, '3': 30, '4': 40, '5': 50,
+             '6': 60, '7': 70, '8': 80, '9': 90, '0': 100}
+
+    def __init__(self, parent, studio, note):
+        wx.Dialog.__init__(self, parent, title='Pitch bend envelope')
+        self.studio = studio
+        self.note = note
+        #: per cent through the note -> semitones. A dictionary because a
+        #: position either has a marker or has not, and because scrubbing
+        #: asks that question a hundred times a second.
+        self.markers = {}
+        rounded = 0
+        for at, value in (note.bend or ()):
+            k = int(round(float(at) * 100))
+            if k in self.markers:
+                rounded += 1
+            self.markers[max(0, min(100, k))] = float(value)
+        self.rounded = rounded
+
+        outer = wx.BoxSizer(wx.VERTICAL)
+        self.list = ReportList(self, style=wx.LC_REPORT | wx.LC_SINGLE_SEL,
+                                size=(340, 240))
+        # one column, and so no heading read out before every value
+        self.list.InsertColumn(0, '', width=320)
+        self.list.Bind(wx.EVT_KEY_DOWN, self.on_key)
+        caption(self, outer, 'Through the note', self.list)
+
+        outer.Add(wx.StaticText(
+            self, label='Left and right move. Space sets a marker, Delete '
+                        'removes one.\nJ and K jump marker to marker, the '
+                        'number keys jump by tens.\nF plays the note. '
+                        'Shift+Delete clears the bend.'),
+            0, wx.ALL, 6)
+        outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL),
+                  0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizerAndFit(outer)
+        self.sync(select=0)
+        self.list.SetFocus()
+
+    # -- what a position says ---------------------------------------------
+
+    def value_at(self, k):
+        """The semitones at `k` per cent, or None where nothing says.
+
+        Between two markers the bend slides, so the value between them is the
+        line between them -- the same line the engine is given. After the last
+        marker it holds. Before the first there is nothing to hold: the note
+        starts whatever the note before it left behind, which is not this
+        note's to say.
+        """
+        if not self.markers:
+            return None
+        keys = sorted(self.markers)
+        if k < keys[0]:
+            return None
+        if k >= keys[-1]:
+            return self.markers[keys[-1]]
+        lo = max(x for x in keys if x <= k)
+        hi = min(x for x in keys if x > k)
+        a, b = self.markers[lo], self.markers[hi]
+        return a + (b - a) * (k - lo) / float(hi - lo)
+
+    def row_text(self, k):
+        parts = ['%d per cent' % k]
+        value = self.value_at(k)
+        if value is not None:
+            parts.append(semitone_text(value))
+        if k in self.markers:
+            parts.append('marker')
+        return ', '.join(parts)
+
+    def sync(self, select=None):
+        at = self.cursor() if select is None else select
+        self.list.DeleteAllItems()
+        for k in range(101):
+            self.list.InsertItem(k, self.row_text(k))
+        self.go_to(at)
+
+    def refresh_from(self, k):
+        """Redraw every row a change at `k` could have moved.
+
+        A marker changes the value of everything between its neighbours, and
+        the last marker changes everything after it, so the cheap answer is to
+        redraw the lot: a hundred and one rows of one short string is nothing,
+        and working out the range is more code than it saves.
+        """
+        for i in range(101):
+            self.list.SetItem(i, 0, self.row_text(i))
+
+    def cursor(self):
+        i = self.list.GetFirstSelected()
+        return i if i >= 0 else 0
+
+    def go_to(self, k):
+        """Move the cursor, and let the list say where it landed.
+
+        Nothing is announced by hand here. Moving the focus of a list is
+        already an announcement -- the row is read as the focus arrives, which
+        is the whole reason the scrub is a list -- and adding one of our own on
+        top says every position twice.
+        """
+        k = max(0, min(100, int(k)))
+        self.list.Select(k)
+        self.list.Focus(k)
+        self.list.EnsureVisible(k)
+
+    # -- the keys ----------------------------------------------------------
+
+    def on_key(self, evt):
+        code = evt.GetKeyCode()
+        shift = evt.ShiftDown()
+        k = self.cursor()
+        if code == wx.WXK_LEFT:
+            self.go_to(k - 1)
+        elif code == wx.WXK_RIGHT:
+            self.go_to(k + 1)
+        elif code == wx.WXK_SPACE:
+            self.set_marker(k)
+        elif code in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE, wx.WXK_BACK):
+            self.clear() if shift else self.drop_marker(k)
+        elif code == ord('J'):
+            self.jump(k, 1)
+        elif code == ord('K'):
+            self.jump(k, -1)
+        elif code == ord('F'):
+            self.on_preview()
+        elif brush_key(code) or code in (ord('0'), wx.WXK_NUMPAD0):
+            key = brush_key(code) or '0'
+            self.go_to(self.JUMPS[key])
+        elif code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.EndModal(wx.ID_OK)
+        else:
+            evt.Skip()
+
+    def set_marker(self, k):
+        """Space: ask what the pitch does here, and put it here."""
+        at = self.markers.get(k)
+        with wx.TextEntryDialog(
+                self, 'Semitones above or below the written pitch. '
+                      'Two is a whole tone; minus one is a semitone flat.',
+                'Marker at %d per cent' % k,
+                '' if at is None else '%g' % round(at, 3)) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            typed = dlg.GetValue().strip()
+        if not typed:
+            self.drop_marker(k)
+            return
+        try:
+            value = float(typed)
+        except ValueError:
+            self.studio.announce_state('%s is not a number of semitones'
+                                       % typed, self.list)
+            return
+        value = max(-BEND_LIMIT, min(BEND_LIMIT, value))
+        self.markers[k] = value
+        self.refresh_from(k)
+        # the cursor has not moved, so nothing has been said: the row under it
+        # changed underneath it, which is what reannounce is for
+        reannounce(self.list, k)
+
+    def drop_marker(self, k):
+        if k not in self.markers:
+            self.studio.announce_state('no marker here', self.list)
+            return
+        del self.markers[k]
+        self.refresh_from(k)
+        self.studio.announce_state(
+            'marker at %d per cent removed, %d left'
+            % (k, len(self.markers)), self.list)
+
+    def clear(self):
+        if not self.markers:
+            self.studio.announce_state('there is no bend to clear', self.list)
+            return
+        self.markers.clear()
+        self.refresh_from(0)
+        self.studio.announce_state('bend cleared', self.list)
+
+    def jump(self, k, way):
+        """J and K: to the next marker along, or the one before."""
+        going = [x for x in sorted(self.markers) if
+                 (x > k if way > 0 else x < k)]
+        if not going:
+            self.studio.announce_state(
+                'no marker %s here' % ('after' if way > 0 else 'before'),
+                self.list)
+            return
+        self.go_to(going[0] if way > 0 else going[-1])
+
+    def on_preview(self):
+        self.studio.engine.render(
+            self.studio.song([Note(self.note.phonemes, self.note.pitch,
+                                   self.note.beats, self.note.word,
+                                   self.result())]),
+            lambda res: wx.CallAfter(self._heard, res))
+
+    def _heard(self, res):
+        if res:
+            self.studio.play_audio(res)
+
+    def result(self):
+        return [(k / 100.0, self.markers[k]) for k in sorted(self.markers)]
 
 
 class BendDialog(wx.Dialog):
@@ -1195,6 +1518,11 @@ class Frame(wx.Frame):
         self.program_map = {}
         #: how you like to work, kept between songs and between sittings
         self.settings = settings.load()
+        #: how much Alt with the arrow keys adds and takes away. A setting of
+        #: the program rather than of the song -- it is how you are working
+        #: just now, not something about the music -- so it is kept with the
+        #: other one of those and is there again next time.
+        self.brush = brush_beats(self.settings.get('brush'))
         #: the timer that waits for the nudging to stop before previewing
         self._preview_timer = None
         #: and the one that waits before keeping a copy of the song
@@ -1552,6 +1880,8 @@ class Frame(wx.Frame):
                      'Delete on a track  remove it',
                      'Ctrl+Up or Ctrl+Down on a track  reorder the parts',
                      'Ctrl+W  add word', 'Ctrl+N  add note',
+                     'Shift+Enter  put a word on the notes selected, keeping '
+                     'their pitches and lengths',
                      'Ctrl+R  add a rest, a silent break',
                      'Ctrl+Shift+R  rest to the end of the bar',
                      'Ctrl+G  go to a bar',
@@ -1565,9 +1895,15 @@ class Frame(wx.Frame):
                      'Ctrl+Shift+P  hear a note whenever it is nudged',
                      'Shift with the arrow keys selects more than one note',
                      'Alt+Up or Alt+Down  transpose a semitone',
-                     'Alt+Right or Alt+Left  a sixteenth note longer or '
+                     'Alt+Right or Alt+Left  one brushful longer or '
                      'shorter',
-                     'Pitch bend is set per note, in the note editor',
+                     '1 to 9 on a note pick the brush: 1 whole, 2 half, '
+                     '3 thirty-second, 4 quarter, 5 quarter triplet, '
+                     '6 sixteenth, 7 sixteenth triplet, 8 eighth, '
+                     '9 eighth triplet',
+                     'Alt+Enter  draw this note\'s pitch bend: scrub '
+                     'through the note with the arrow keys, Space sets a '
+                     'marker, J and K jump between them, F plays it',
                      'Space  play from the note the cursor is on, or stop '
                      'if it is playing',
                      'Ctrl+P  play every track from the start',
@@ -2013,6 +2349,9 @@ class Frame(wx.Frame):
                 self.nudge_length(False)
         elif evt.ControlDown() and code in (wx.WXK_UP, wx.WXK_DOWN):
             self.move_notes(-1 if code == wx.WXK_UP else 1)
+        elif not (evt.ControlDown() or evt.AltDown() or evt.ShiftDown()) \
+                and brush_key(code) in BRUSHES:
+            self.set_brush(brush_key(code))
         elif code == wx.WXK_SPACE and not (evt.ControlDown()
                                            or evt.AltDown()
                                            or evt.ShiftDown()):
@@ -2024,6 +2363,10 @@ class Frame(wx.Frame):
              ord('V'): self.on_paste}[code](None)
         elif code in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE):
             self.on_remove(None)
+        elif evt.AltDown() and code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.on_envelope(None)
+        elif evt.ShiftDown() and code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
+            self.on_word_over(None)
         elif code in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER):
             self.on_edit(None)
         else:
@@ -2060,9 +2403,23 @@ class Frame(wx.Frame):
         self.announce_note(message, self.list, rows[0])
         self.preview_note(rows[0])
 
+    def set_brush(self, key):
+        """A number key picks what Alt with the arrows adds and takes away.
+
+        Said out loud and not merely shown, because nothing else about the
+        window changes when it is pressed: the notes are as they were and the
+        row that is focused is the row that was focused. The only way to know
+        which brush is in hand is to be told, or to press an arrow and find
+        out from what happens to a note.
+        """
+        self.brush = BRUSHES[key]
+        self.settings['brush'] = self.brush
+        settings.save(self.settings)
+        self.announce_state(brush_name(self.brush), self.list)
+
     @undoable('change note length')
     def nudge_length(self, up):
-        """Move the selected note a sixteenth note longer or shorter."""
+        """Move the selected note one brushful longer or shorter."""
         rows = self.selected()
         if not rows:
             self.say('select a note first')
@@ -2070,7 +2427,7 @@ class Frame(wx.Frame):
         moved = 0
         for i in rows:
             n = self.notes[i]
-            want = stepped_length(n.beats, up)
+            want = stepped_length(n.beats, up, self.brush)
             if want is None:
                 continue
             n.beats = want
@@ -2088,8 +2445,8 @@ class Frame(wx.Frame):
         if len(rows) == 1:
             message = spoken_length(self.notes[rows[0]].beats, self.signature())
         else:
-            message = '%d notes a sixteenth %s' % (
-                moved, 'longer' if up else 'shorter')
+            message = '%d notes %s %s' % (moved, a_brush(self.brush),
+                                          'longer' if up else 'shorter')
         self.announce_note(message, self.list, rows[0])
 
     def sync_lengths(self):
@@ -2227,6 +2584,77 @@ class Frame(wx.Frame):
                  % (added[0].word or 'the word', len(added),
                     '' if len(added) == 1 else 's',
                     ', '.join(n.text() for n in added)))
+
+    @undoable('pitch bend')
+    def on_envelope(self, _evt):
+        """Alt+Enter: draw the pitch bend for this note by scrubbing it.
+
+        One note, because a bend is a shape drawn inside a note and two notes
+        do not share one. The first of the selection is the one that opens.
+        """
+        rows = self.selected()
+        if not rows:
+            self.say('select a note first')
+            return
+        note = self.notes[rows[0]]
+        self.say('pitch bend envelope for %s, %s'
+                 % (note.text() or 'an empty note', pitch_name(note.pitch)))
+        with EnvelopeDialog(self, self, note) as dlg:
+            if dlg.rounded:
+                self.say('%d of this note\'s bend points fell on the same per '
+                         'cent as another and were merged. Pitch bend in the '
+                         'note editor shows them exactly.' % dlg.rounded)
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            note.bend = dlg.result()
+        self.touch()
+        self.refresh_row(rows[0])
+        self.announce_note(
+            project.describe_bend(note.bend) or 'no bend', self.list, rows[0])
+        self.preview_note(rows[0])
+
+    @undoable('set the word on notes')
+    def on_word_over(self, _evt):
+        """Shift+Enter: look a word up and sing it on the notes selected.
+
+        The dictionary used to be reachable only from Add word, which adds
+        notes -- so a line already written could not be given a different word
+        without deleting it and typing it again. This puts the word on notes
+        that exist: they keep their pitches, their lengths and their bends,
+        which are the tune, and only what they are singing changes.
+
+        Select as many notes as the word has syllables and it divides itself
+        across them. Select fewer and it is divided into as many as there are.
+        Select more and the ones the word does not reach are left alone rather
+        than emptied, and are named, because a note quietly cleared is worse
+        than a note the word did not get to.
+        """
+        rows = self.selected()
+        if not rows:
+            self.say('select a note first')
+            return
+        over = [self.notes[i] for i in rows]
+        with AddWordDialog(self, self, over[0].pitch, over[0].beats,
+                           over=over) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return
+            written = dlg.result()
+        if not written:
+            return
+        for k, made in enumerate(written):
+            note = self.notes[rows[k]]
+            note.phonemes = list(made.phonemes)
+            note.word = made.word
+        self.touch()
+        self.sync_lengths()
+        word = written[0].word or 'the word'
+        said = '%s over %d note%s' % (word, len(written),
+                                      '' if len(written) == 1 else 's')
+        if len(written) < len(rows):
+            said += ', and %d left as %s' % (
+                len(rows) - len(written),
+                'it was' if len(rows) - len(written) == 1 else 'they were')
+        self.announce_note(said, self.list, rows[0])
 
     @undoable('add note')
     def on_add_note(self, _evt):
