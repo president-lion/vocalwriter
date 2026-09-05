@@ -497,12 +497,12 @@ class Engine(object):
         hit = self._cache.get(key)
         if hit is not None:
             self._cache.move_to_end(key)
-            y, peak, short = hit
+            y, peak, short, _sends = hit
             cached = True
         else:
             y, peak = self._samples(core)
             short = self.stopped_short
-            self._remember(key, y, peak, short)
+            self._remember(key, y, peak, short, self.reverb_sends)
             cached = False
         audio = self._ticked(y, metro, core)
         res = {'seconds': len(y) / float(SAMPLE_RATE), 'peak': peak,
@@ -513,21 +513,98 @@ class Engine(object):
             res['path'] = out
         return res
 
-    def _remember(self, key, y, peak, short):
+    def tail(self, song, at):
+        """What the room is still doing when the song is stopped `at` frames in.
+
+        Stopping a song should not stop the room it was sung in. The singing
+        stops dead, which is what stopping means; this is what carries on --
+        the reverb of everything sung up to that moment, and none of what was
+        going to come after it, which is why the wet already computed for the
+        whole song is no use here and this is worked out instead.
+
+        Only the recent past goes through. The delay lines have forgotten
+        anything older than the tail itself, so feeding them the last tail's
+        worth of the song puts them in the state they were actually in, and
+        the answer is the same to within a couple of parts in 32768 -- while
+        costing the same twenty-five milliseconds whether the song was one
+        minute long or ten. It is a keypress: it has to be quick.
+
+        None when there is nothing ringing: no reverb, nothing played yet, or
+        a song this engine has not got a render of.
+        """
+        core = {k: v for k, v in song.items() if k != 'metronome'}
+        key = hashlib.sha256(
+            json.dumps(core, sort_keys=True).encode()).hexdigest()
+        hit = self._cache.get(key)
+        if hit is None:
+            return None
+        y, _peak, _short, sends = hit
+        at = int(at)
+        if not sends or at <= 0 or at >= len(y):
+            return None
+        pieces = []
+        for send, room, wet in sends:
+            room_tail = int(SAMPLE_RATE
+                            * (REVERB_TAIL_SECONDS * room / 100.0 + 0.5))
+            # The singing is shorter than the song: stopping during the
+            # reverb's own tail is stopping after the end of the send, and
+            # the room is still ringing there. Feed it what there is and
+            # count the silence in between.
+            start = max(0, at - room_tail)
+            warm = send[start:min(at, len(send))]
+            if not len(warm):        # older than the room can remember
+                continue
+            skip = at - start
+            eng = open_engine()
+            try:
+                if not eng.reverb(room / 100.0, 1.0):
+                    continue
+                padded = np.concatenate(
+                    [warm, np.zeros((room_tail, 2), dtype=np.float32)])
+                frames = (len(padded) // 220) * 220
+                pcm = np.clip(padded[:frames], -1.0, 1.0)
+                pcm = (pcm * 32767).astype('<i2').reshape(-1)
+                eng.reverberate(pcm)
+                rung = pcm.reshape(-1, 2).astype(np.float32) / 32767.0
+            finally:
+                eng.close()
+            pieces.append(rung[skip:] * (wet / 100.0))
+        pieces = [p for p in pieces if len(p)]
+        if not pieces:
+            return None
+        out = np.zeros((max(len(p) for p in pieces), 2), dtype=np.float32)
+        for p in pieces:
+            out[:len(p)] += p
+        # a room that has already fallen silent is not worth playing
+        loud = np.abs(out).max(axis=1) > (1.0 / 32767.0)
+        if not loud.any():
+            return None
+        return out[:int(np.nonzero(loud)[0][-1]) + 1]
+
+    @staticmethod
+    def _entry_bytes(entry):
+        y, _peak, _short, sends = entry
+        return y.nbytes + sum(send.nbytes for send, _room, _wet in sends)
+
+    def _remember(self, key, y, peak, short, sends):
         """Keep this render, and drop the oldest until the total fits.
 
-        A song longer than the whole allowance is simply not kept: making room
+        What the reverb was fed is kept beside the mix, because stopping the
+        song needs it and a stop can come long after the render did.
+
+        A song larger than the whole allowance is simply not kept: making room
         for it would mean throwing away everything else to hold one thing that
         would itself be thrown away by the next render.
         """
-        if y.nbytes > CACHE_BYTES:
+        entry = (y, peak, short, list(sends))
+        if self._entry_bytes(entry) > CACHE_BYTES:
             return
-        self._cache[key] = (y, peak, short)
+        self._cache[key] = entry
         self._cache.move_to_end(key)
-        total = sum(v[0].nbytes for v in self._cache.values())
+        total = sum(self._entry_bytes(v) for v in self._cache.values())
         while total > CACHE_BYTES and len(self._cache) > 1:
-            _old, (dropped, _p, _s) = self._cache.popitem(last=False)
-            total -= dropped.nbytes
+            _old, dropped = self._cache.popitem(last=False)
+            total -= self._entry_bytes(dropped)
 
     @staticmethod
     def _ticked(y, metro, song):
@@ -559,6 +636,11 @@ class Engine(object):
         if not any(t.get('notes') for t in tracks):
             raise ValueError('nothing to sing')
         self.stopped_short = False
+        #: what each reverb was fed, kept so that stopping the song can work
+        #: out what the room is still doing. Set here the way stopped_short
+        #: is, rather than returned, so that _samples keeps the shape every
+        #: caller already expects of it.
+        self.reverb_sends = []
         song_reverb = clean_reverb(song.get('reverb'))
         groups = {}
         for t in tracks:
@@ -589,6 +671,8 @@ class Engine(object):
                     send[:len(y), 0] += y * vol
                     send[:len(y), 1] += y * vol
                 mixes.append((rev, dry, send))
+                if rev[1] > 0:
+                    self.reverb_sends.append((send, rev[0], rev[1]))
             # Several voices at once can add up past full scale. Turning the
             # mix down is a great deal better than clipping it -- and it has
             # to happen before the reverb, which works on 16-bit samples and

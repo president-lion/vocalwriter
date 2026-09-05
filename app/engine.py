@@ -98,6 +98,10 @@ class Engine(object):
         """
         self.send('render', cb, song=song, out=out)
 
+    def tail(self, song, at, cb):
+        """The reverb still ringing if `song` is stopped `at` frames in."""
+        self.send('tail', cb, song=song, at=at)
+
     def close(self):
         if self._closing:
             return

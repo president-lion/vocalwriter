@@ -58,6 +58,14 @@ WAVE_MAPPER = 0xFFFFFFFF
 WAVE_FORMAT_PCM = 1
 CALLBACK_NULL = 0
 WHDR_DONE = 0x00000001
+TIME_SAMPLES = 0x0002
+
+
+class MMTIME(ctypes.Structure):
+    """waveOutGetPosition's answer. The union is eight bytes whatever is in
+    it, and for TIME_SAMPLES the first four of them are the sample count."""
+
+    _fields_ = [('wType', ctypes.c_uint), ('u', ctypes.c_ubyte * 8)]
 
 
 class WAVEFORMATEX(ctypes.Structure):
@@ -108,6 +116,8 @@ class WaveOut(object):
                                                 ctypes.c_uint]
         for name in ('waveOutReset', 'waveOutClose'):
             getattr(self._mm, name).argtypes = [ctypes.c_void_p]
+        self._mm.waveOutGetPosition.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(MMTIME), ctypes.c_uint]
         self._h = None
         self._hdr = None
         self._buf = None
@@ -144,6 +154,19 @@ class WaveOut(object):
             self.stop()               # finished: give the device back
             return False
         return True
+
+    def position(self):
+        """How many frames have been played, straight from the device."""
+        if self._h is None:
+            return 0
+        mm = MMTIME()
+        mm.wType = TIME_SAMPLES
+        if self._mm.waveOutGetPosition(self._h, ctypes.byref(mm),
+                                       ctypes.sizeof(mm)):
+            return 0
+        if mm.wType != TIME_SAMPLES:      # the device offered another unit
+            return 0
+        return int.from_bytes(bytes(mm.u)[:4], 'little')
 
     def stop(self):
         if self._h is None:
@@ -215,6 +238,8 @@ class AudioQueue(object):
         self._cb = CALLBACK(lambda user, queue, buf: None)
         self._q = None
         self._ends = 0.0
+        self._began = 0.0
+        self._rate = SAMPLE_RATE
 
     def play(self, data, channels, rate):
         self.stop()
@@ -236,7 +261,9 @@ class AudioQueue(object):
             self._at.AudioQueueDispose(q, True)
             return False
         self._q = q
-        self._ends = time.monotonic() + len(data) / float(rate * frame)
+        self._began = time.monotonic()
+        self._rate = rate
+        self._ends = self._began + len(data) / float(rate * frame)
         return True
 
     def playing(self):
@@ -246,6 +273,12 @@ class AudioQueue(object):
             self.stop()
             return False
         return True
+
+    def position(self):
+        """Off the clock rather than the queue: near enough for a keypress."""
+        if self._q is None:
+            return 0
+        return int(max(0.0, time.monotonic() - self._began) * self._rate)
 
     def stop(self):
         if self._q is None:
@@ -269,6 +302,8 @@ class FilePlayer(object):
         self._proc = None
         self._path = None
         self._ends = 0.0
+        self._began = 0.0
+        self._rate = SAMPLE_RATE
 
     def play(self, data, channels, rate):
         from ppc.render import write_wav
@@ -282,7 +317,9 @@ class FilePlayer(object):
         except OSError:
             return False
         self._path = path
-        self._ends = time.monotonic() + len(data) / float(rate * channels * 2)
+        self._began = time.monotonic()
+        self._rate = rate
+        self._ends = self._began + len(data) / float(rate * channels * 2)
         if sys.platform == 'darwin':
             self._proc = subprocess.Popen(['afplay', path])
             return True
@@ -292,6 +329,11 @@ class FilePlayer(object):
         if self._proc is not None:
             return self._proc.poll() is None
         return False
+
+    def position(self):
+        if self._proc is None:
+            return 0
+        return int(max(0.0, time.monotonic() - self._began) * self._rate)
 
     def stop(self):
         if self._proc is None:
@@ -346,6 +388,19 @@ class Player(object):
             self._out.stop()
         except Exception:                                    # noqa: BLE001
             pass
+
+    def position(self):
+        """How far into the sound it has got, in frames. 0 when stopped.
+
+        This is what stopping needs: the reverb that is still ringing depends
+        on how much of the song was actually sung before the key was pressed.
+        """
+        if self._out is None:
+            return 0
+        try:
+            return int(self._out.position())
+        except Exception:                                    # noqa: BLE001
+            return 0
 
     def state(self):
         """Whether a sound is playing, so one key can start and stop it."""

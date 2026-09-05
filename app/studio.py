@@ -21,6 +21,7 @@ render that has already been done returns the cached audio at once.
 import math
 import os
 import sys
+import time
 
 import wx
 
@@ -33,6 +34,7 @@ from app import version                                      # noqa: E402
 from app import project                                      # noqa: E402
 from app.engine import Engine                                # noqa: E402
 from app.player import PLAYING, Player                        # noqa: E402
+from app.player import SAMPLE_RATE as PLAY_RATE               # noqa: E402
 from ppc import paths, phonology, render                     # noqa: E402
 from ppc.song import parse_pitch                             # noqa: E402
 
@@ -1117,6 +1119,11 @@ class Frame(wx.Frame):
         self.voice_names = ['Robert']
         self.palette = []
         self.player = Player()
+        #: the song the sound now playing was made from, so that stopping it
+        #: can ask what its reverb is still doing, and whether what is playing
+        #: is itself such a tail -- stopping a tail just stops it
+        self.playing_song = None
+        self.ringing = False
         self.rendering = False
         self.path = None            # the project file, once it has one
         self.dirty = False
@@ -2248,7 +2255,7 @@ class Frame(wx.Frame):
             self.say('still rendering')
             return
         if self.player.state() == PLAYING:
-            self.player.stop()
+            self.stop_audio(ring=True)
             self.say('stopped')
             return
         self.start_playing(self.start_beats())
@@ -2280,12 +2287,16 @@ class Frame(wx.Frame):
                  % (len(live), '' if len(live) == 1 else 's', bar,
                     round(beat, 2),
                     (total - start) * 60.0 / self.bpm))
-        self.engine.render(self.playback(start),
-                           lambda res: wx.CallAfter(self._played, res))
+        playing = self.playback(start)
+        self.engine.render(playing,
+                           lambda res: wx.CallAfter(self._played, res,
+                                                    playing))
 
-    def _played(self, res):
+    def _played(self, res, song=None):
         self.rendering = False
         self.mi_play.Enable(True)
+        # what stopping will ask about, once there is something to stop
+        self.playing_song = song
         if not res:
             self.say('render failed')
             return
@@ -2322,14 +2333,59 @@ class Frame(wx.Frame):
             self.say('cannot play: no sound output this program knows how to '
                      'open. Exporting to a WAV still works.')
 
-    def stop_audio(self):
+    def stop_audio(self, ring=False):
+        """Stop the sound. With `ring`, let the room it was sung in carry on.
+
+        A room does not fall silent because the singers did. The singing stops
+        at once, which is what pressing stop means, and the reverb that was
+        still ringing at that moment is worked out from where the song had got
+        to and played after it -- so stopping halfway sounds like stopping in a
+        hall rather than like the power being cut.
+
+        Only a deliberate stop rings. Stopping to start something else does
+        not: the new sound is the answer to that keypress, and the old room
+        ringing over the top of it would be in the way. Nor does stopping a
+        tail, which would otherwise ask for the tail of a tail.
+        """
+        at = self.player.position() if ring else 0
+        stopped = time.monotonic()
+        song, was_tail = self.playing_song, self.ringing
+        self.playing_song = None
+        self.ringing = False
         try:
             self.player.stop()
         except Exception:
             pass
+        if ring and song is not None and at > 0 and not was_tail:
+            self.engine.tail(song, at,
+                             lambda res: wx.CallAfter(self._ring_out, res,
+                                                      stopped))
+
+    def _ring_out(self, tail, stopped):
+        """Play what the room had left, if it has not been overtaken.
+
+        Working the tail out takes a moment on the engine's thread, and in
+        that moment something else may have been started; if it has, the room
+        belongs to the song that is over and is not worth hearing over the
+        new one.
+
+        That moment is also a gap in the sound, so it is taken off the front
+        of the tail rather than played: the room goes on decaying while the
+        tail is being worked out, and picking it up where it has got to by
+        then is what makes the join inaudible.
+        """
+        if tail is None or not len(tail):
+            return
+        if self.rendering or self.player.state() == PLAYING:
+            return
+        gone = int(max(0.0, time.monotonic() - stopped) * PLAY_RATE)
+        if gone >= len(tail):
+            return                    # it decayed while we were working it out
+        self.ringing = True
+        self.player.play(tail[gone:])
 
     def on_stop(self, _evt):
-        self.stop_audio()
+        self.stop_audio(ring=True)
         self.say('stopped')
 
     def on_export(self, _evt):

@@ -156,6 +156,23 @@ jobs:
           assert abs(ll - cl) < 1e-3 and abs(lr - cr) < 1e-3, 'the reverb panned left'
           assert abs(rl - cl) < 1e-3 and abs(rr - cr) < 1e-3, 'the reverb panned right'
 
+          # Stopping the singing does not stop the room. What is still
+          # ringing is worked out from where the song had got to, and after
+          # the singing has finished it must be exactly what the render
+          # itself has there -- the same reverb, arrived at the other way.
+          ring = {'bpm': 100, 'reverb': {'room': 70, 'wet': 30},
+                  'tracks': [part()]}
+          whole = eng.render(ring)['audio']
+          at = int(44100 * 2.0)
+          rung = eng.tail(ring, at)
+          assert rung is not None and len(rung) > 44100, 'nothing rang out'
+          k = min(len(rung), len(whole) - at)
+          gap = float(np.abs(rung[:k] - whole[at:at + k]).max())
+          print('tail on stop: %.2f s, differs from the render by %.1f LSB'
+                % (len(rung) / 44100.0, gap * 32767))
+          assert gap * 32767 < 4, 'the tail is not the reverb the render made'
+          assert eng.tail(ring, 0) is None, 'a song not started cannot ring'
+
           long_part = part(notes=[{'pitch': 60 + (i % 5), 'beats': 0.5,
                                    'phonemes': ['AA']} for i in range(160)])
           res = eng.render({'bpm': 120, 'tracks': [long_part]}, 'ci-long.wav')
