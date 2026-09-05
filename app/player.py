@@ -9,14 +9,18 @@ it was still open, and a round trip through the filesystem on every press of
 the space bar. No sequencer plays a song by saving it first, and this one no
 longer does either.
 
-Windows is spoken to through waveOut, which takes a block of PCM and plays it.
-The whole song goes in as one block -- it is already in memory, in full, so
-there is nothing to stream and no way to starve the card -- and the header it
-was queued with raises a flag when the block has finished, which is what lets
-one key both start the song and stop it.
+Windows is spoken to through waveOut, a chunk at a time. Not because the song
+has to be streamed -- it is all in memory, in full -- but because what plays
+next has to be changeable without stopping what is playing now. Stopping the
+singing is not stopping the sound: the room goes on ringing, and the card has
+to be handed that tail without ever running dry. Twenty milliseconds a chunk
+with three of them in the card's hands, so a stop takes effect within sixty
+milliseconds, and sixty is long enough to work out what the room is still
+doing and follow straight on with it.
 
-The Mac is spoken to through AudioQueue, in the same shape: one buffer,
-enqueued whole, started, and timed.
+The Mac is spoken to through AudioQueue, which is handed the whole buffer, and
+what follows a stop is started after it rather than spliced onto it -- there
+is a small gap there that Windows does not have.
 
 Neither needs anything installed: both are ctypes calls into a library the
 system already has. Where neither can be opened there is a fallback that does
@@ -28,6 +32,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 import numpy as np
@@ -36,6 +41,13 @@ STOPPED, PLAYING = 'stopped', 'playing'
 
 #: what the engine renders at, and so what the card is opened at
 SAMPLE_RATE = 44100
+
+#: A chunk, and how many of them are kept in the card's hands. Multiplied
+#: together they are the lag between pressing stop and the singing stopping,
+#: so they are small; each on its own has to be big enough that the thread
+#: doing the feeding is never late with the next one.
+CHUNK_FRAMES = 882                      # 20 ms at 44100
+CHUNKS_AHEAD = 3                        # 60 ms in the card's hands
 
 
 def to_pcm(samples):
@@ -92,8 +104,23 @@ WAVEHDR._fields_ = [('lpData', ctypes.c_void_p),
                     ('reserved', ctypes.c_void_p)]
 
 
+class Chunk(object):
+    """One header and the memory the card reads it out of.
+
+    Both are held for as long as the device is open. Letting go of the memory
+    while the card is still reading out of it is a crash rather than an error,
+    so the header remembers whether it is out on loan.
+    """
+
+    def __init__(self, nbytes):
+        self.buf = ctypes.create_string_buffer(nbytes)
+        self.hdr = WAVEHDR()
+        self.hdr.lpData = ctypes.cast(self.buf, ctypes.c_void_p)
+        self.lent = False
+
+
 class WaveOut(object):
-    """One block of PCM on the default output device.
+    """The default output device, fed a chunk at a time by a thread of its own.
 
     The device is opened for the song and closed when the song ends or is
     stopped, rather than held open for the life of the program: an editor that
@@ -118,71 +145,210 @@ class WaveOut(object):
             getattr(self._mm, name).argtypes = [ctypes.c_void_p]
         self._mm.waveOutGetPosition.argtypes = [
             ctypes.c_void_p, ctypes.POINTER(MMTIME), ctypes.c_uint]
+        self._lock = threading.RLock()
         self._h = None
-        self._hdr = None
-        self._buf = None
+        self._feeder = None
+        self._quit = False
+        self._chunks = []
+        self._channels = 1
+        self._rate = SAMPLE_RATE
+        #: what is being read, and how far into it the card has been fed
+        self._src = None
+        self._pos = 0
+        #: frames of the song handed over altogether, which is where a stop
+        #: has to take effect: everything up to here is already the card's
+        self._queued = 0
+        self._singing = True
+        self._stop_at = None
+        self._follow = None
+        #: silence fed while waiting for something to follow with, so that
+        #: what does arrive is picked up where it had got to by then
+        self._owed = 0
 
-    def play(self, data, channels, rate):
+    # -- what the window calls --------------------------------------------
+
+    def play(self, samples, rate):
         self.stop()
+        y = np.ascontiguousarray(np.asarray(samples, dtype=np.float32))
+        channels = 1 if y.ndim == 1 else y.shape[1]
         fmt = WAVEFORMATEX(WAVE_FORMAT_PCM, channels, rate,
                            rate * channels * 2, channels * 2, 16, 0)
         h = ctypes.c_void_p()
         if self._mm.waveOutOpen(ctypes.byref(h), WAVE_MAPPER,
                                 ctypes.byref(fmt), 0, 0, CALLBACK_NULL):
             return False
-        # the card reads out of this buffer for as long as it is playing, so
-        # it is held here and not let go of until after waveOutReset
-        buf = ctypes.create_string_buffer(data)
-        hdr = WAVEHDR()
-        hdr.lpData = ctypes.cast(buf, ctypes.c_void_p)
-        hdr.dwBufferLength = len(data)
-        size = ctypes.sizeof(hdr)
-        if self._mm.waveOutPrepareHeader(h, ctypes.byref(hdr), size):
-            self._mm.waveOutClose(h)
-            return False
-        if self._mm.waveOutWrite(h, ctypes.byref(hdr), size):
-            self._mm.waveOutUnprepareHeader(h, ctypes.byref(hdr), size)
-            self._mm.waveOutClose(h)
-            return False
-        self._h, self._hdr, self._buf = h, hdr, buf
+        with self._lock:
+            self._h = h
+            self._channels, self._rate = channels, rate
+            self._src, self._pos, self._queued = y, 0, 0
+            self._singing = True
+            self._stop_at = self._follow = None
+            self._owed = 0
+            self._chunks = [Chunk(CHUNK_FRAMES * channels * 2)
+                            for _ in range(CHUNKS_AHEAD + 1)]
+            self._top_up()               # the card starts out already fed
+        self._quit = False
+        self._feeder = threading.Thread(target=self._feed, daemon=True)
+        self._feeder.start()
         return True
 
+    def stop_at(self):
+        """Stop the song after what the card already has, and say where.
+
+        That is the earliest it can stop without a gap -- what has been handed
+        over cannot be taken back -- and it is the frame whatever follows has
+        to carry on from.
+        """
+        with self._lock:
+            if self._h is None or not self._singing:
+                return 0
+            self._stop_at = self._queued
+            return self._stop_at
+
+    def follow_with(self, samples):
+        """What to play where the song leaves off. None lets it end there.
+
+        Nothing happens unless a stop is waiting to be followed. A follow-on
+        worked out for a song that has since been stopped outright, or that
+        something else has been started over the top of, arrives to find
+        nothing to attach itself to -- which is what should become of it,
+        rather than its cutting into whatever is playing now.
+        """
+        with self._lock:
+            if self._h is None or self._stop_at is None or not self._singing:
+                return
+            if samples is None or not len(samples):
+                self._follow = np.zeros((0,), dtype=np.float32)
+                return
+            self._follow = np.ascontiguousarray(
+                np.asarray(samples, dtype=np.float32))
+
     def playing(self):
-        if self._h is None:
-            return False
-        if self._hdr.dwFlags & WHDR_DONE:
-            self.stop()               # finished: give the device back
-            return False
-        return True
+        with self._lock:
+            if self._h is None:
+                return False
+            if any(c.lent and not (c.hdr.dwFlags & WHDR_DONE)
+                   for c in self._chunks):
+                return True
+            if not self._spent():
+                return True
+        self.stop()                      # finished: give the device back
+        return False
 
     def position(self):
         """How many frames have been played, straight from the device."""
-        if self._h is None:
-            return 0
-        mm = MMTIME()
-        mm.wType = TIME_SAMPLES
-        if self._mm.waveOutGetPosition(self._h, ctypes.byref(mm),
-                                       ctypes.sizeof(mm)):
-            return 0
-        if mm.wType != TIME_SAMPLES:      # the device offered another unit
-            return 0
-        return int.from_bytes(bytes(mm.u)[:4], 'little')
+        with self._lock:
+            if self._h is None:
+                return 0
+            mm = MMTIME()
+            mm.wType = TIME_SAMPLES
+            if self._mm.waveOutGetPosition(self._h, ctypes.byref(mm),
+                                           ctypes.sizeof(mm)):
+                return 0
+            if mm.wType != TIME_SAMPLES:  # the device offered another unit
+                return 0
+            return int.from_bytes(bytes(mm.u)[:4], 'little')
 
     def stop(self):
-        if self._h is None:
+        self._quit = True
+        feeder = self._feeder
+        if feeder is not None and feeder is not threading.current_thread():
+            feeder.join(timeout=1.0)
+        self._feeder = None
+        with self._lock:
+            h, chunks = self._h, self._chunks
+            self._h, self._chunks = None, []
+            self._src = self._follow = None
+        if h is None:
             return
-        # kept on the stack until the device is closed: dropping the buffer
-        # while the card is still reading out of it is a crash, not an error
-        h, hdr, buf = self._h, self._hdr, self._buf
-        self._h = self._hdr = self._buf = None
-        size = ctypes.sizeof(hdr)
         try:
-            self._mm.waveOutReset(h)          # a queued block must be taken
-            self._mm.waveOutUnprepareHeader(  # back before it can be freed
-                h, ctypes.byref(hdr), size)
+            self._mm.waveOutReset(h)     # a lent block has to be taken back
+            for c in chunks:             # before its memory can be let go of
+                if c.lent:
+                    self._mm.waveOutUnprepareHeader(
+                        h, ctypes.byref(c.hdr), ctypes.sizeof(c.hdr))
+                    c.lent = False
         finally:
             self._mm.waveOutClose(h)
-        del buf
+        del chunks
+
+    # -- the feeding -------------------------------------------------------
+
+    def _feed(self):
+        """Keep the card's hands full until there is nothing left to put in."""
+        while not self._quit:
+            with self._lock:
+                if self._h is None:
+                    return
+                self._top_up()
+                if self._spent() and not any(c.lent for c in self._chunks):
+                    return               # played out; playing() will notice
+            time.sleep(0.004)
+
+    def _top_up(self):
+        """Take back what the card has finished with, and hand it more."""
+        for c in self._chunks:
+            if c.lent:
+                if not (c.hdr.dwFlags & WHDR_DONE):
+                    continue
+                self._mm.waveOutUnprepareHeader(
+                    self._h, ctypes.byref(c.hdr), ctypes.sizeof(c.hdr))
+                c.lent = False
+            block = self._next_block()
+            if block is None:
+                continue
+            ctypes.memmove(c.buf, block, len(block))
+            c.hdr.dwBufferLength = len(block)
+            c.hdr.dwFlags = 0
+            size = ctypes.sizeof(c.hdr)
+            if self._mm.waveOutPrepareHeader(self._h, ctypes.byref(c.hdr),
+                                             size):
+                continue
+            if self._mm.waveOutWrite(self._h, ctypes.byref(c.hdr), size):
+                self._mm.waveOutUnprepareHeader(self._h, ctypes.byref(c.hdr),
+                                                size)
+                continue
+            c.lent = True
+
+    def _limit(self):
+        """How far into what is being read the card may be fed."""
+        if self._src is None:
+            return 0
+        if self._singing and self._stop_at is not None:
+            return min(len(self._src), self._stop_at)
+        return len(self._src)
+
+    def _spent(self):
+        # holding the line for something that has not arrived is not finished
+        if (self._singing and self._stop_at is not None
+                and self._follow is None):
+            return False
+        return self._pos >= self._limit()
+
+    def _next_block(self):
+        """The next chunk of PCM, or None when there is nothing to send."""
+        if self._src is None:
+            return None
+        if self._pos < self._limit():
+            take = self._src[self._pos:self._pos + CHUNK_FRAMES]
+            self._pos += len(take)
+            if self._singing:
+                self._queued += len(take)
+            return to_pcm(take)[0]
+        if self._singing and self._stop_at is not None:
+            if self._follow is None:
+                # Nothing to follow with yet. Hold the line rather than let
+                # the card run dry, and count what was held, so that what does
+                # arrive is picked up where it had got to rather than replayed.
+                self._owed += CHUNK_FRAMES
+                return b'\0' * (CHUNK_FRAMES * self._channels * 2)
+            self._singing = False
+            self._src = self._follow
+            self._pos = min(self._owed, len(self._src))
+            self._owed = 0
+            self._follow = None
+            return self._next_block()
+        return None
 
 
 # -- the Mac ---------------------------------------------------------------
@@ -224,12 +390,17 @@ CALLBACK = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p,
 
 
 class AudioQueue(object):
-    """The same idea through AudioToolbox: one buffer, enqueued and started.
+    """AudioToolbox, handed the whole buffer at once.
 
     The queue wants a callback for the moment a buffer has been consumed, so
     it is given one, but the callback fires when the queue has finished
     reading the samples rather than when the speaker has finished making the
     sound. The length of the audio is what says whether it is still playing.
+
+    What follows a stop is started after it rather than spliced onto it, so
+    the join is not the seamless one waveOut gets. What was worked out while
+    the queue was being turned round is skipped rather than played, so at
+    least the room goes on decaying at the rate it should.
     """
 
     def __init__(self):
@@ -240,9 +411,13 @@ class AudioQueue(object):
         self._ends = 0.0
         self._began = 0.0
         self._rate = SAMPLE_RATE
+        self._stopped = 0.0
 
-    def play(self, data, channels, rate):
+    def play(self, samples, rate):
         self.stop()
+        data, channels = to_pcm(samples)
+        if not len(data):
+            return False
         frame = channels * 2
         fmt = ASBD(float(rate), LINEAR_PCM, PCM_FLAGS, frame, 1, frame,
                    channels, 16, 0)
@@ -280,6 +455,19 @@ class AudioQueue(object):
             return 0
         return int(max(0.0, time.monotonic() - self._began) * self._rate)
 
+    def stop_at(self):
+        at = self.position()
+        self.stop()
+        self._stopped = time.monotonic()
+        return at
+
+    def follow_with(self, samples):
+        if samples is None or not len(samples):
+            return
+        gone = int(max(0.0, time.monotonic() - self._stopped) * self._rate)
+        if gone < len(samples):
+            self.play(samples[gone:], self._rate)
+
     def stop(self):
         if self._q is None:
             return
@@ -301,16 +489,14 @@ class FilePlayer(object):
     def __init__(self):
         self._proc = None
         self._path = None
-        self._ends = 0.0
         self._began = 0.0
         self._rate = SAMPLE_RATE
+        self._stopped = 0.0
 
-    def play(self, data, channels, rate):
+    def play(self, samples, rate):
         from ppc.render import write_wav
         self.stop()
-        y = (np.frombuffer(data, '<i2').astype(np.float32) / 32767.0)
-        if channels > 1:
-            y = y.reshape(-1, channels)
+        y = np.asarray(samples, dtype=np.float32)
         path = os.path.join(tempfile.gettempdir(), 'vw_playback.wav')
         try:
             write_wav(path, y, rate)
@@ -319,7 +505,6 @@ class FilePlayer(object):
         self._path = path
         self._began = time.monotonic()
         self._rate = rate
-        self._ends = self._began + len(data) / float(rate * channels * 2)
         if sys.platform == 'darwin':
             self._proc = subprocess.Popen(['afplay', path])
             return True
@@ -334,6 +519,19 @@ class FilePlayer(object):
         if self._proc is None:
             return 0
         return int(max(0.0, time.monotonic() - self._began) * self._rate)
+
+    def stop_at(self):
+        at = self.position()
+        self.stop()
+        self._stopped = time.monotonic()
+        return at
+
+    def follow_with(self, samples):
+        if samples is None or not len(samples):
+            return
+        gone = int(max(0.0, time.monotonic() - self._stopped) * self._rate)
+        if gone < len(samples):
+            self.play(samples[gone:], self._rate)
 
     def stop(self):
         if self._proc is None:
@@ -369,17 +567,42 @@ class Player(object):
         """Start playing `samples`. True if it is playing.
 
         The samples are float, one column or two, exactly as the renderer
-        produced them; they are not held on to after this returns.
+        produced them.
         """
         if self._out is None:
             return False
-        data, channels = to_pcm(samples)
-        if not len(data):
+        y = np.asarray(samples, dtype=np.float32)
+        if not len(y):
             return False
         try:
-            return bool(self._out.play(data, channels, rate))
+            return bool(self._out.play(y, rate))
         except Exception:                                    # noqa: BLE001
             return False
+
+    def stop_at(self):
+        """Stop the singing as soon as it can be, and say where that was.
+
+        The frame it comes back with is where whatever follows has to carry on
+        from. It is a little past where the key was pressed, because what the
+        card already has cannot be taken back -- sixty milliseconds at the
+        most, which is not enough to notice, and taking it back would leave a
+        hole in the sound, which is.
+        """
+        if self._out is None:
+            return 0
+        try:
+            return int(self._out.stop_at())
+        except Exception:                                    # noqa: BLE001
+            return 0
+
+    def follow_with(self, samples):
+        """What to play where the song left off. None lets it end there."""
+        if self._out is None:
+            return
+        try:
+            self._out.follow_with(samples)
+        except Exception:                                    # noqa: BLE001
+            pass
 
     def stop(self):
         if self._out is None:
@@ -390,11 +613,7 @@ class Player(object):
             pass
 
     def position(self):
-        """How far into the sound it has got, in frames. 0 when stopped.
-
-        This is what stopping needs: the reverb that is still ringing depends
-        on how much of the song was actually sung before the key was pressed.
-        """
+        """How far into the sound it has got, in frames. 0 when stopped."""
         if self._out is None:
             return 0
         try:
