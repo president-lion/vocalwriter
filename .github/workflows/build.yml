@@ -135,6 +135,27 @@ jobs:
           assert clipped == 0, 'the wavetable voices are clipping again'
           assert y.ndim == 2, 'the reverb should have made it stereo'
 
+          # The reverb belongs to the room, not to the part: moving a part
+          # across the stereo field must not carry its reverb along with it,
+          # and the tail must have room to decay -- it runs 2.1 s at the
+          # default room and 5.2 at the largest, where it used to be cut off
+          # one second after the last note whatever the room was.
+          def tail_of(pan):
+              dry, _ = eng._samples({'bpm': 100, 'tracks': [part(pan=pan)]})
+              y, _ = eng._samples({'bpm': 100, 'reverb': {'room': 70, 'wet': 30},
+                                   'tracks': [part(pan=pan)]})
+              t = y[len(dry):]
+              return len(t) / 44100.0, np.abs(t[:, 0]).sum(), np.abs(t[:, 1]).sum()
+
+          secs, cl, cr = tail_of(0.0)
+          _s, ll, lr = tail_of(-1.0)
+          _s, rl, rr = tail_of(1.0)
+          print('tail %.2f s; centred L/R %.0f/%.0f, hard left %.0f/%.0f, '
+                'hard right %.0f/%.0f' % (secs, cl, cr, ll, lr, rl, rr))
+          assert secs > 3.0, 'the reverb tail is being cut off again'
+          assert abs(ll - cl) < 1e-3 and abs(lr - cr) < 1e-3, 'the reverb panned left'
+          assert abs(rl - cl) < 1e-3 and abs(rr - cr) < 1e-3, 'the reverb panned right'
+
           long_part = part(notes=[{'pitch': 60 + (i % 5), 'beats': 0.5,
                                    'phonemes': ['AA']} for i in range(160)])
           res = eng.render({'bpm': 120, 'tracks': [long_part]}, 'ci-long.wav')

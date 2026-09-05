@@ -221,6 +221,16 @@ def pan_gains(pan):
 #: VocalWriter's own defaults for a new song, from its reverb dialog.
 DEFAULT_REVERB = (40, 24)
 
+#: How long the reverb rings on after the singing stops, at the largest room.
+#: Not to be confused with TAIL_SECONDS above, which is the much shorter decay
+#: a single note is given room for.
+#: The delay lines scale with the room, and so does the tail: measured from an
+#: impulse, it is 5.2 seconds at 100 and in proportion all the way down --
+#: 2.1 at the default 40. The render gives it that much silence to decay into
+#: and trims back whatever is still silent, so a song ends when the room does
+#: and not a second after the last note, which is where it used to end.
+REVERB_TAIL_SECONDS = 5.2
+
 #: What a voice at full volume is aimed at, as a fraction of full scale.
 #: Not 1.0: several parts are going to be added together, and a voice that
 #: only just fits on its own leaves nothing for the others.
@@ -559,35 +569,45 @@ class Engine(object):
             left, right = pan_gains(t.get('pan', 0.0))
             own = t.get('reverb')
             rev = song_reverb if own is None else clean_reverb(own)
-            groups.setdefault(rev, []).append((y, vol * left, vol * right))
+            groups.setdefault(rev, []).append((y, vol * left, vol * right,
+                                               vol))
         parts = [p for group in groups.values() for p in group]
-        n = max(len(y) for y, _l, _r in parts)
+        n = max(len(y) for y, _l, _r, _v in parts)
         stereo = (any(abs(float(t.get('pan', 0.0))) > 1e-6 for t in tracks)
                   or any(wet > 0 for _room, wet in groups))
         if stereo:
             mixes = []
             for rev, group in groups.items():
-                mix = np.zeros((n, 2), dtype=np.float32)
-                for y, gl, gr in group:
-                    mix[:len(y), 0] += y * gl
-                    mix[:len(y), 1] += y * gr
-                mixes.append((rev, mix))
+                dry = np.zeros((n, 2), dtype=np.float32)
+                send = np.zeros((n, 2), dtype=np.float32)
+                for y, gl, gr, vol in group:
+                    dry[:len(y), 0] += y * gl
+                    dry[:len(y), 1] += y * gr
+                    # What the reverb hears is the same parts with no panning
+                    # on them: panning a part moves the part across the room,
+                    # it does not carry the room along with it.
+                    send[:len(y), 0] += y * vol
+                    send[:len(y), 1] += y * vol
+                mixes.append((rev, dry, send))
             # Several voices at once can add up past full scale. Turning the
             # mix down is a great deal better than clipping it -- and it has
             # to happen before the reverb, which works on 16-bit samples and
             # would clip whatever it was handed.
-            peak = float(np.abs(sum(m for _r, m in mixes)).max()) if n else 0.0
+            peak = (float(np.abs(sum(d for _r, d, _s in mixes)).max())
+                    if n else 0.0)
             if peak > 1.0:
-                for _rev, mix in mixes:
-                    mix /= peak
-            done = [self._reverberate(mix, rev) for rev, mix in mixes]
+                for _rev, dry, send in mixes:
+                    dry /= peak
+                    send /= peak
+            done = [self._reverberate(dry, send, rev)
+                    for rev, dry, send in mixes]
             # a reverb tail makes its group longer than the singing
             out = np.zeros((max(len(d) for d in done), 2), dtype=np.float32)
             for d in done:
                 out[:len(d)] += d
             return out, peak
         out = np.zeros(n, dtype=np.float32)
-        for y, gl, _gr in parts:          # in the middle both gains are the
+        for y, gl, _gr, _v in parts:      # in the middle both gains are the
             out[:len(y)] += y * gl        # volume, so one channel says it all
         peak = float(np.abs(out).max()) if n else 0.0
         if peak > 1.0:
@@ -596,26 +616,38 @@ class Engine(object):
             out /= peak
         return out, peak
 
-    def _reverberate(self, mix, reverb):
-        """One group's mix through the engine's own reverb.
+    def _reverberate(self, dry, send, reverb):
+        """One group's mix with its reverb on it: `dry` panned, `send` centred.
+
+        The reverberator is two mono reverbs side by side -- the left delay
+        lines only ever hear the left channel, and nothing crosses between
+        them -- so handing it the panned mix put a hard-panned part's reverb
+        hard against the same wall, and panning a part swung the whole room
+        with it. It is handed the centred sum instead, and what comes back is
+        added to the panned dry. The part moves; the room stays where it is.
+
+        Asking for all wet asks for no dry, the engine's dry gain being
+        1 - wet, so the reverb returns its own signal on its own and the two
+        are mixed here. That is what leaves the dry free to keep its panning,
+        and it keeps the dry out of 16 bits on the way through.
 
         The reverberator works on the 16-bit samples the engine writes, 220
-        frames at a time, so the mix goes to 16 bits and back. That is what the
-        application does with its own sound buffers; going through floats
-        instead would be a different reverb.
-
-        The tail is what the last block leaves behind, so the mix is given a
-        second of room to decay into and the silence trimmed back off.
+        frames at a time. That is what the application does with its own sound
+        buffers; going through floats instead would be a different reverb.
         """
         room, wet = reverb
-        if wet <= 0 or not len(mix):
-            return mix
+        if wet <= 0 or not len(dry):
+            return dry
+        heard = wet / 100.0
         eng = open_engine()
         try:
-            if not eng.reverb(room / 100.0, wet / 100.0):
-                return mix
-            tail = np.zeros((SAMPLE_RATE, 2), dtype=np.float32)
-            padded = np.concatenate([mix, tail])
+            if not eng.reverb(room / 100.0, 1.0):
+                return dry
+            # room enough for the tail to decay into, and half a second over
+            room_tail = int(SAMPLE_RATE
+                            * (REVERB_TAIL_SECONDS * room / 100.0 + 0.5))
+            padded = np.concatenate(
+                [send, np.zeros((room_tail, 2), dtype=np.float32)])
             block = 220
             frames = (len(padded) // block) * block
             pcm = np.clip(padded[:frames], -1.0, 1.0)
@@ -624,11 +656,16 @@ class Engine(object):
             wet_mix = pcm.reshape(-1, 2).astype(np.float32) / 32767.0
         finally:
             eng.close()
-        # keep whatever of the tail is not silence, so a reverb longer than a
-        # second is not cut off, and a short one does not pad the file
+        # keep whatever of the tail is not silence, so a big room is not cut
+        # off and a small one does not pad the song with nothing
         loud = np.abs(wet_mix).max(axis=1) > (1.0 / 32767.0)
-        last = int(np.nonzero(loud)[0][-1]) + 1 if loud.any() else len(mix)
-        return wet_mix[:max(len(mix), min(last, len(wet_mix)))]
+        last = int(np.nonzero(loud)[0][-1]) + 1 if loud.any() else len(dry)
+        end = max(len(dry), min(last, len(wet_mix)))
+        out = np.zeros((end, 2), dtype=np.float32)
+        out[:len(dry)] = dry * (1.0 - heard)
+        k = min(end, len(wet_mix))
+        out[:k] += wet_mix[:k] * heard
+        return out
 
     def _track(self, track, bpm, consonants, start=0.0, early=True):
         """One track's audio, phrase by phrase, laid out on the beat.
