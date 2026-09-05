@@ -1,0 +1,10 @@
+Three entries in this archive are symbolic links, and Windows did not create
+them when it was unpacked. Nothing was lost: each is an absolute path into the
+Corona SDK on the machine the archive was made on, and none of them point at
+anything inside the archive.
+
+    hebrew/dt_tts/App/ios/CoronaEnterprise    -> /Applications/CoronaEnterprise
+    hebrew/foo/dt_tts/App/ios/CoronaEnterprise -> /Applications/CoronaEnterprise
+    hebrew/testtts/App/ios/CoronaEnterprise   -> /Applications/CoronaEnterprise
+
+The iOS projects under those directories expect the SDK to be reachable there.
