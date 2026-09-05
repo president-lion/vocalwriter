@@ -139,10 +139,23 @@ def with_metronome(y, bpm, bar_beats, start=0.0, rate=SAMPLE_RATE, lead=0.0):
 PITCH_STEP = 12.0 / 256.0
 
 #: The bend range the engine is put into before any bend is sent. A song
-#: carries its bend in semitones, so the range is ours to choose; twelve covers
-#: anything a voice would do and keeps the 14-bit value comfortably fine --
-#: one step is a fifth of a cent.
-BEND_RANGE = 12.0
+#: carries its bend in semitones, so the range is ours to choose, and it is
+#: also the ceiling: a bend past it is clamped, which is what stopped a marker
+#: going beyond an octave.
+#:
+#: Twenty-four, because the engine turns out to have plenty of room. Measured
+#: on a held vowel with the sensitivity opened up, it bends exactly -- to
+#: within a thousandth of a semitone -- from fifteen semitones down to
+#: thirty-three up, drifts by a third of a semitone by two octaves down, and
+#: goes silent somewhere between thirty-three and thirty-six up. Two octaves
+#: either way sits inside all of that with room to spare.
+#:
+#: Widening it costs nothing audible. The 14-bit value is now a third of a
+#: cent a step rather than a fifth, and the engine's own pitch grid is
+#: 4.6875 cents (see PITCH_STEP), so what is sent is still far finer than what
+#: is played: a bend of 2 and one of 7 semitones measured identically before
+#: and after the change.
+BEND_RANGE = 24.0
 
 
 #: How often a bend in motion is sent to the engine. One frame is 220

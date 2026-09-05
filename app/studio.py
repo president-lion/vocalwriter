@@ -40,7 +40,13 @@ from ppc import paths, phonology, render                     # noqa: E402
 from ppc.song import parse_pitch                             # noqa: E402
 
 SHARP = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
-COLUMNS = (('Phonemes', 165), ('Pitch', 55), ('Beats', 150), ('Word', 95),
+#: A note's row. Three of the six headings are blank, because a heading is
+#: read out before the value under it and "Pitch: C4, Beats: 0.5, eighth note,
+#: Word: test" is four words of furniture around three of content. A pitch
+#: reads as a pitch, a length reads as a length and a word reads as a word;
+#: none of them needs to be told what it is. Bend and Bar keep theirs: "+1.5
+#: and back" and "1:1" do not say what they are on their own.
+COLUMNS = (('Phonemes', 165), ('', 55), ('', 150), ('', 95),
            ('Bend', 90), ('Bar', 55))
 #: A track is what it is called, what it sings with, and whether it can be
 #: heard. Its volume and its pan were columns here too, until the list was
@@ -132,10 +138,15 @@ def note_value(beats):
 REST = '%'
 
 
-#: As far as a marker may be put from the written pitch. The engine is set up
-#: for twelve either way (ppc.engine.BEND_RANGE); an octave is more than any
-#: voice does and stops a typing slip singing something inaudible.
-BEND_LIMIT = 12.0
+#: As far as a marker may be put from the written pitch, and the same number
+#: the engine is set up for (ppc.engine.BEND_RANGE, which is the real ceiling
+#: -- anything past it is clamped down there rather than sung).
+#:
+#: It was an octave, which turned out to be a limit for no reason: measured on
+#: a held vowel, the engine bends exactly from fifteen semitones down to
+#: thirty-three up before it gives out. Two octaves either way is inside that
+#: and is more than a voice does.
+BEND_LIMIT = 24.0
 
 
 def semitone_text(value):
@@ -181,6 +192,11 @@ def file_name(text, fallback='track'):
 
 #: How long the song has to stop changing for before a copy is kept.
 RECOVERY_WAIT = 2500
+
+#: How long the selecting has to stop for before the count is said. Shorter
+#: than the preview wait: a count is cheap and is wanted promptly, where a
+#: render is neither.
+SELECTION_WAIT = 120
 
 #: How long the nudging has to stop for before a note is previewed. Long
 #: enough that holding an arrow key does not queue up a render per step, short
@@ -230,6 +246,17 @@ def stepped_length(beats, up, step=SIXTEENTH):
     return round(want, 6)
 
 
+def note_count(notes, done):
+    """"12 notes copied", or the note itself when there is only the one.
+
+    One note is named rather than counted, because "1 note copied" tells you
+    nothing you did not know and the note does: you can hear which one went.
+    """
+    if len(notes) == 1:
+        return '%s %s' % (notes[0].label(), done)
+    return '%d notes %s' % (len(notes), done)
+
+
 def brush_name(beats):
     """A brush as it is said: "quarter", "sixteenth triplet"."""
     return note_value(beats) or ('%g beats' % beats)
@@ -275,9 +302,13 @@ def beat_count(n):
 
 
 def length_text(beats):
-    """A length for the Beats column: the number, and its name if it has one."""
+    """A length for the row: its name, or the number when it has no name.
+
+    It used to be both -- "0.5, eighth note" -- which is the same fact twice,
+    and the half of it that is read first is the half that means less.
+    """
     name = note_value(beats)
-    return '%g, %s note' % (beats, name) if name else '%g' % beats
+    return '%s note' % name if name else '%g beats' % beats
 
 
 def spoken_length(beats, sig):
@@ -490,7 +521,12 @@ class PhonemePicker(wx.Dialog):
         self.pitch = pitch
         pal = studio.singable()
         self.symbols = [row[0] for row in pal]
-        choices = ['%s   as in %s' % (s, e) if e else s for s, e in pal]
+        # "IY as in bEEt" was typed to show the eye which letters make the
+        # sound, and is read out as "b E Et" -- the capitals are letters to a
+        # screen reader, not emphasis. Lower case, and dashes either side of
+        # "as in", which is a pause: symbol, then what it sounds like.
+        choices = ['%s - as in - %s' % (sym, word.lower()) if word else sym
+                   for sym, word in pal]
 
         outer = wx.BoxSizer(wx.VERTICAL)
         self.choice = wx.Choice(self, choices=choices, size=(300, -1))
@@ -790,6 +826,41 @@ class PointDialog(wx.Dialog):
                 num(self.value, 0.0))
 
 
+#: wx has no name for the key left of the 1, which is where a row of keys
+#: reading ten, twenty, thirty would put nought.
+WXK_GRAVE = 192
+
+
+class SemitoneDialog(wx.Dialog):
+    """How far the pitch is from the written note, at one point in it.
+
+    A dialog of its own rather than wx.TextEntryDialog, for one reason: what
+    is already there has to arrive selected. Setting a marker that exists is
+    almost always changing it, and a field whose contents have to be cleared
+    before they can be replaced is a field that makes you press Ctrl+A first,
+    every time.
+    """
+
+    def __init__(self, parent, per_cent, value=''):
+        wx.Dialog.__init__(self, parent,
+                           title='Marker at %d per cent' % per_cent)
+        outer = wx.BoxSizer(wx.VERTICAL)
+        self.text = wx.TextCtrl(self, value=value, size=(120, -1),
+                                style=wx.TE_PROCESS_ENTER)
+        self.text.Bind(wx.EVT_TEXT_ENTER, lambda e: self.EndModal(wx.ID_OK))
+        labelled(self, outer, 'Semitones', self.text,
+                 hint='above or below the written pitch. Two is a whole tone, '
+                      'minus one a semitone flat. Blank removes the marker.')
+        outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL),
+                  0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizerAndFit(outer)
+        self.text.SetFocus()
+        self.text.SelectAll()          # so typing replaces rather than appends
+
+    def value(self):
+        return self.text.GetValue().strip()
+
+
 class EnvelopeDialog(wx.Dialog):
     """A note's pitch bend, scrubbed through rather than listed.
 
@@ -814,9 +885,10 @@ class EnvelopeDialog(wx.Dialog):
     of those exactly, and this says so when it has had to round.
     """
 
-    #: what each number key jumps to. Nought is the far end, not the near one:
-    #: Home is already the near one, and the row of keys reads as ten, twenty,
-    #: through to a hundred.
+    #: What each number key jumps to. Nought is the far end, not the near one,
+    #: because the row of keys reads as ten, twenty, through to a hundred --
+    #: and the near end is the key to the left of the one, which is where the
+    #: row would carry on if it could.
     JUMPS = {'1': 10, '2': 20, '3': 30, '4': 40, '5': 50,
              '6': 60, '7': 70, '8': 80, '9': 90, '0': 100}
 
@@ -846,9 +918,10 @@ class EnvelopeDialog(wx.Dialog):
 
         outer.Add(wx.StaticText(
             self, label='Left and right move. Space sets a marker, Delete '
-                        'removes one.\nJ and K jump marker to marker, the '
-                        'number keys jump by tens.\nF plays the note. '
-                        'Shift+Delete clears the bend.'),
+                        'removes one.\nJ and K jump back and forward marker '
+                        'to marker. The number keys jump by tens, and the '
+                        'key left of the 1 goes to the start.\nF plays the '
+                        'note. Shift+Delete clears the bend.'),
             0, wx.ALL, 6)
         outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL),
                   0, wx.EXPAND | wx.ALL, 8)
@@ -938,9 +1011,11 @@ class EnvelopeDialog(wx.Dialog):
         elif code in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE, wx.WXK_BACK):
             self.clear() if shift else self.drop_marker(k)
         elif code == ord('J'):
-            self.jump(k, 1)
-        elif code == ord('K'):
             self.jump(k, -1)
+        elif code == ord('K'):
+            self.jump(k, 1)
+        elif code in (ord('`'), ord('~'), WXK_GRAVE):
+            self.go_to(0)
         elif code == ord('F'):
             self.on_preview()
         elif brush_key(code) or code in (ord('0'), wx.WXK_NUMPAD0):
@@ -954,14 +1029,11 @@ class EnvelopeDialog(wx.Dialog):
     def set_marker(self, k):
         """Space: ask what the pitch does here, and put it here."""
         at = self.markers.get(k)
-        with wx.TextEntryDialog(
-                self, 'Semitones above or below the written pitch. '
-                      'Two is a whole tone; minus one is a semitone flat.',
-                'Marker at %d per cent' % k,
-                '' if at is None else '%g' % round(at, 3)) as dlg:
+        with SemitoneDialog(self, k,
+                            '' if at is None else '%g' % round(at, 3)) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
                 return
-            typed = dlg.GetValue().strip()
+            typed = dlg.value()
         if not typed:
             self.drop_marker(k)
             return
@@ -971,7 +1043,11 @@ class EnvelopeDialog(wx.Dialog):
             self.studio.announce_state('%s is not a number of semitones'
                                        % typed, self.list)
             return
-        value = max(-BEND_LIMIT, min(BEND_LIMIT, value))
+        if abs(value) > BEND_LIMIT:
+            self.studio.announce_state(
+                '%g is past what the engine will bend; %g semitones is as far '
+                'as it goes' % (value, BEND_LIMIT), self.list)
+            value = max(-BEND_LIMIT, min(BEND_LIMIT, value))
         self.markers[k] = value
         self.refresh_from(k)
         # the cursor has not moved, so nothing has been said: the row under it
@@ -1523,6 +1599,11 @@ class Frame(wx.Frame):
         #: just now, not something about the music -- so it is kept with the
         #: other one of those and is there again next time.
         self.brush = brush_beats(self.settings.get('brush'))
+        #: the pending count of what is selected, and what was last counted,
+        #: so that holding Shift down a phrase says the total once at the end
+        #: rather than every number on the way to it
+        self._counting = None
+        self._counted = 0
         #: the timer that waits for the nudging to stop before previewing
         self._preview_timer = None
         #: and the one that waits before keeping a copy of the song
@@ -1591,6 +1672,8 @@ class Frame(wx.Frame):
             self.list.InsertColumn(i, head, width=width)
         self.list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_edit)
         self.list.Bind(wx.EVT_KEY_DOWN, self.on_key)
+        self.list.Bind(wx.EVT_LIST_ITEM_SELECTED, self.on_selection)
+        self.list.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.on_selection)
         caption(p, outer, 'Notes', self.list)
 
         self.messages = wx.TextCtrl(
@@ -1894,6 +1977,8 @@ class Frame(wx.Frame):
                      'every part follows unless it has its own',
                      'Ctrl+Shift+P  hear a note whenever it is nudged',
                      'Shift with the arrow keys selects more than one note',
+                     'Left or Right on a note  the part before or after this '
+                     'one, without leaving the notes',
                      'Alt+Up or Alt+Down  transpose a semitone',
                      'Alt+Right or Alt+Left  one brushful longer or '
                      'shorter',
@@ -1903,7 +1988,8 @@ class Frame(wx.Frame):
                      '9 eighth triplet',
                      'Alt+Enter  draw this note\'s pitch bend: scrub '
                      'through the note with the arrow keys, Space sets a '
-                     'marker, J and K jump between them, F plays it',
+                     'marker, J and K jump back and forward between them, '
+                     'F plays it',
                      'Space  play from the note the cursor is on, or stop '
                      'if it is playing',
                      'Ctrl+P  play every track from the start',
@@ -2335,6 +2421,52 @@ class Frame(wx.Frame):
                     len(self.notes) - 1)
             self.select_only([i])
 
+    def on_selection(self, evt):
+        """Say how many notes are selected, once the selecting has stopped.
+
+        A list raises one of these per row, so holding Shift and an arrow down
+        a phrase raises dozens; counting on each of them would be a countdown
+        read over the top of the rows themselves. The count is said a moment
+        after the last one instead, and only when there is more than one note
+        in it -- a single selected note is the row the cursor is on, which has
+        just been read out.
+        """
+        evt.Skip()
+        if self._counting is not None and self._counting.IsRunning():
+            self._counting.Stop()
+        self._counting = wx.CallLater(SELECTION_WAIT, self.say_selection)
+
+    def say_selection(self):
+        rows = self.selected()
+        if len(rows) > 1 and len(rows) != self._counted:
+            self.announce_state('%d notes selected' % len(rows), self.list)
+        self._counted = len(rows)
+
+    def step_track(self, by):
+        """Left and right: the part before this one, or the one after.
+
+        The notes list is where the work happens and the tracks list is one
+        line of it, so moving between parts was F6, an arrow, and F6 back --
+        three keys to change one thing, several dozen times an hour. The
+        selection in the tracks list is what actually switches, so this moves
+        that and stays where it is; the cursor comes back to the note it was
+        left on, which the track remembers.
+        """
+        if len(self.tracks) < 2:
+            self.announce_state('this song has one track', self.list)
+            return
+        i = self.current + by
+        if not (0 <= i < len(self.tracks)):
+            self.announce_state(
+                'the %s track' % ('first' if i < 0 else 'last'), self.list)
+            return
+        self.tracks_list.Select(i)          # which is what switches them
+        self.tracks_list.Focus(i)
+        t = self.tracks[i]
+        self.announce_state('%s, %d note%s'
+                            % (t.name, len(t.notes),
+                               '' if len(t.notes) == 1 else 's'), self.list)
+
     def on_key(self, evt):
         code = evt.GetKeyCode()
         if evt.AltDown() and code in (wx.WXK_UP, wx.WXK_DOWN,
@@ -2349,6 +2481,9 @@ class Frame(wx.Frame):
                 self.nudge_length(False)
         elif evt.ControlDown() and code in (wx.WXK_UP, wx.WXK_DOWN):
             self.move_notes(-1 if code == wx.WXK_UP else 1)
+        elif not (evt.ControlDown() or evt.AltDown() or evt.ShiftDown()) \
+                and code in (wx.WXK_LEFT, wx.WXK_RIGHT):
+            self.step_track(-1 if code == wx.WXK_LEFT else 1)
         elif not (evt.ControlDown() or evt.AltDown() or evt.ShiftDown()) \
                 and brush_key(code) in BRUSHES:
             self.set_brush(brush_key(code))
@@ -2372,17 +2507,30 @@ class Frame(wx.Frame):
         else:
             evt.Skip()
 
+    def set_cell(self, row, column, text):
+        """Write a cell, but only if it is going to say something new.
+
+        Rewriting a cell with the text it already holds is not free where a
+        screen reader is listening: the row under the cursor changing is a
+        thing it reports, so a length nudge that redrew all six columns of
+        every row -- five of them with what was already there -- could be
+        answered by the whole row being read back over the top of the one word
+        that was the answer.
+        """
+        if self.list.GetItemText(row, column) != text:
+            self.list.SetItem(row, column, text)
+
     def refresh_row(self, i):
         """Update one row in place, so the selection and focus do not move."""
         n = self.notes[i]
-        self.list.SetItem(i, 0, n.label())
-        self.list.SetItem(i, 1, pitch_name(n.pitch))
-        self.list.SetItem(i, 2, length_text(n.beats))
-        self.list.SetItem(i, 3, n.word)
-        self.list.SetItem(i, 4, project.describe_bend(n.bend))
+        self.set_cell(i, 0, n.label())
+        self.set_cell(i, 1, pitch_name(n.pitch))
+        self.set_cell(i, 2, length_text(n.beats))
+        self.set_cell(i, 3, n.word)
+        self.set_cell(i, 4, project.describe_bend(n.bend))
         # a length change moves every note after this one to a different beat
         for k, where in enumerate(self.bars()):
-            self.list.SetItem(k, 5, where)
+            self.set_cell(k, 5, where)
 
     @undoable('transpose notes')
     def nudge_pitch(self, by):
@@ -2529,10 +2677,9 @@ class Frame(wx.Frame):
             return
         picked = [self.notes[i] for i in rows]
         if not self.to_clipboard(project.to_clipboard(picked)):
-            self.say('the clipboard is busy, try again')
+            self.announce_state('the clipboard is busy, try again', self.list)
             return
-        self.say('copied %s' % (picked[0].label() if len(picked) == 1
-                                else '%d notes' % len(picked)))
+        self.announce_state(note_count(picked, 'copied'), self.list)
 
     @undoable('cut notes')
     def on_cut(self, _evt):
@@ -2545,7 +2692,9 @@ class Frame(wx.Frame):
             self.notes.pop(i)
         self.touch()
         self.sync(select=min(rows[0], len(self.notes) - 1))
-        self.say('cut %d note%s' % (len(rows), '' if len(rows) == 1 else 's'))
+        self.announce_state('%d note%s cut'
+                            % (len(rows), '' if len(rows) == 1 else 's'),
+                            self.list)
 
     @undoable('paste notes')
     def on_paste(self, _evt):
@@ -2561,9 +2710,8 @@ class Frame(wx.Frame):
         self.touch()
         self.sync(select=at)
         self.select_only(list(range(at, at + len(added))))
-        self.say('pasted %d note%s: %s'
-                 % (len(added), '' if len(added) == 1 else 's',
-                    ', '.join(n.label() for n in added[:4])))
+        self.say(', '.join(n.label() for n in added[:4]))
+        self.announce_state(note_count(added, 'pasted'), self.list)
 
     @undoable('add word')
     def on_add_word(self, _evt):
