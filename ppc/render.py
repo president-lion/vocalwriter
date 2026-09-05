@@ -145,8 +145,12 @@ VOICE_CONTROLS = (
      'how fast it wavers'),
     ('chorus', 'Speech_Chorus', 0, 0, 127, 'Chorus', 'thickens the voice'),
     ('breath', 'Speech_Breath', 0, 0, 127, 'Breath', 'adds air to the tone'),
-    ('detune', 'Speech_Detune', 0, -8192, 8191, 'Detune',
-     'a shade sharp or flat'),
+    # Measured across its whole range on a held vowel: about sixteen cents
+    # flat at -8192, five sharp at 8191, and nothing at all between -256 and
+    # +2048. It is the engine's own control and it stays, but the track
+    # dialog's Detune is a bend, which moves the pitch by what it says.
+    ('detune', 'Speech_Detune', 0, -8192, 8191, 'Voice detune',
+     "the engine's own, which hardly moves the pitch"),
     ('portamento', 'Speech_Portamento', 0, 0, 127, 'Portamento',
      'glide between notes; 0 goes straight there'),
 )

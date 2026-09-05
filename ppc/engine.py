@@ -92,13 +92,18 @@ def click(rate=SAMPLE_RATE, hz=CLICK_HZ, level=CLICK_LEVEL):
             * np.exp(-t * 45.0)).astype(np.float32)
 
 
-def with_metronome(y, bpm, bar_beats, start=0.0, rate=SAMPLE_RATE):
+def with_metronome(y, bpm, bar_beats, start=0.0, rate=SAMPLE_RATE, lead=0.0):
     """The audio with a tick on every beat, accented at each bar line.
 
     `start` is the beat the audio itself begins on, so that playing from
     partway through a song still puts the ticks on the song's beats and the
     accents on its bar lines, rather than counting a fresh bar from wherever
     the cursor happened to be.
+
+    `lead` is the silence a part singing early has put in front of everything
+    (see `lead_seconds`). The click is on the song's beats, and the song has
+    moved, so the click moves with it -- otherwise turning the metronome on
+    would report that a humanised song is a quarter of a second out of time.
     """
     spb = 60.0 / max(bpm, 1e-6)
     plain, accent = click(rate), click(rate, CLICK_ACCENT_HZ,
@@ -108,8 +113,9 @@ def with_metronome(y, bpm, bar_beats, start=0.0, rate=SAMPLE_RATE):
     ticks = np.zeros(n, dtype=np.float32)
     beats = max(1, int(round(bar_beats)))             # keep 3/4, 6/8 and 7/8
     k = int(math.ceil(start - 1e-9))
+    ahead = int(round(lead * rate))
     while True:
-        at = int(round((k - start) * spb * rate))
+        at = int(round((k - start) * spb * rate)) + ahead
         if at >= n:
             break
         tick = accent if (k % beats == 0) else plain
@@ -121,6 +127,16 @@ def with_metronome(y, bpm, bar_beats, start=0.0, rate=SAMPLE_RATE):
     if peak > 1.0:                        # the ticks must not push it into clip
         out /= peak
     return out
+
+#: The engine's pitch grid: it moves in steps of a 256th of an octave, which
+#: is 4.6875 cents, and it takes the step at or below what it is asked for.
+#: Measured on a held vowel by sweeping the bend a cent at a time -- every
+#: value from -4 to -1 cents came out at -4.69 and every value from 0 to +4
+#: came out at 0. Asking for a cent and being given five flat is not a detune
+#: control, so half a step is added before the engine floors it, which turns
+#: the floor into a round and leaves the worst error at 2.3 cents rather than
+#: 4.7 in one direction and 0 in the other.
+PITCH_STEP = 12.0 / 256.0
 
 #: The bend range the engine is put into before any bend is sent. A song
 #: carries its bend in semitones, so the range is ours to choose; twelve covers
@@ -174,24 +190,35 @@ def _triples(points):
             yield pt[0], pt[1], False
 
 
-def bend_events(points, t0, t1):
+def bend_events(points, t0, t1, detune=0.0):
     """Bend points for one phrase, in seconds from its own start.
 
     Everything is rebased on the phrase because each phrase is rendered on its
     own engine. Whatever bend was in force when the phrase began is carried in
     ahead of it, or a phrase starting partway through a slide would begin on
     the wrong pitch.
+
+    `detune` is semitones added to every bend, and to the pitch the phrase
+    starts on where there is no bend at all: it is a part sung a shade sharp
+    or flat from end to end. It rides on the bend rather than on the engine's
+    own Speech_Detune because the bend is what moves the pitch -- Speech_Detune
+    was measured across its whole range and shifts a note by about sixteen
+    cents flat to five sharp, doing nothing at all between -256 and +2048.
     """
-    if not points:
+    if not points and not detune:
         return []
     ev = [(-1.0, 'sens', int(BEND_RANGE))]
     before = [v for t, v, _sl in _triples(points) if t < t0]
-    if before:
-        ev.append((-1.0, 'bend', _raw(before[-1])))
+    base = (before[-1] if before else 0.0) + detune
     last = None
+    # With no bend and no detune the phrase starts where it always did, and
+    # this is the value that would have been sent anyway.
+    if before or detune:
+        last = _raw(base)
+        ev.append((-1.0, 'bend', last))
     for t, v in glide(points):
         if t0 <= t <= t1:
-            raw = _raw(v)
+            raw = _raw(v + detune)
             if raw != last:                 # sending the same value twice is
                 ev.append((t - t0, 'bend', raw))   # work the engine need not do
                 last = raw
@@ -332,6 +359,24 @@ def tracks_of(song):
              'notes': song.get('notes') or [],
              'bends': song.get('bends') or [],
              'velocity': song.get('velocity', 64)}]
+
+
+def lead_seconds(song):
+    """The silence in front of the song, so that a part can come in early.
+
+    A part's offset moves it off the beat, and a part cannot be moved earlier
+    than the beginning of the song -- there is nothing there to move it into,
+    and trimming its first few milliseconds instead is cutting the attack off
+    the very note the offset was meant to place. So the earliest part decides:
+    everything, and the metronome with it, is delayed by as much as that part
+    is early, which leaves every part in the right place relative to every
+    other and costs a quarter of a second of silence at the front at worst.
+
+    A song where nothing is early -- which is every song that has not been
+    humanised -- gets none, and renders exactly as it did before.
+    """
+    offsets = [float(t.get('offset', 0) or 0) for t in tracks_of(song)]
+    return max(0.0, -min(offsets)) / 1000.0 if offsets else 0.0
 
 
 def is_rest(phonemes):
@@ -612,7 +657,8 @@ class Engine(object):
             return y
         return with_metronome(y, float(song.get('bpm', 120)),
                               float(metro.get('bar', 4)),
-                              float(song.get('start', 0.0)))
+                              float(song.get('start', 0.0)),
+                              lead=lead_seconds(song))
 
     def _samples(self, song):
         """Mix every track of a song, and say how loud the result came out.
@@ -643,8 +689,9 @@ class Engine(object):
         self.reverb_sends = []
         song_reverb = clean_reverb(song.get('reverb'))
         groups = {}
+        lead = lead_seconds(song)
         for t in tracks:
-            y = self._track(t, bpm, consonants, start, early)
+            y = self._track(t, bpm, consonants, start, early, lead)
             # the volume went into the engine, where it can prevent clipping
             # rather than merely quieten it
             vol = 1.0
@@ -751,7 +798,8 @@ class Engine(object):
         out[:k] += wet_mix[:k] * heard
         return out
 
-    def _track(self, track, bpm, consonants, start=0.0, early=True):
+    def _track(self, track, bpm, consonants, start=0.0, early=True,
+               lead=0.0):
         """One track's audio, phrase by phrase, laid out on the beat.
 
         Rests are not sung. Each run of notes between them goes to its own
@@ -792,9 +840,21 @@ class Engine(object):
                 pass
         # [(beat, semitones, slides into the next)], in the song's own time
         bends = sorted(_triples(track.get('bends') or []))
+        # A part sung a shade sharp or flat, and a shade early or late. Two
+        # voices in perfect tune and perfect time are one voice twice as loud;
+        # a few cents and a few milliseconds apart is what two singers are.
+        detune = float(track.get('detune', 0)) / 100.0        # cents
+        if detune:                        # see PITCH_STEP: floor into round
+            detune += PITCH_STEP / 2.0
+        # `lead` has already made room for the earliest part in the song, so
+        # this is never negative unless the part is early and alone in being
+        # so, which cannot happen: it is what set the lead.
+        shift = int(round((float(track.get('offset', 0)) / 1000.0 + lead)
+                          * SAMPLE_RATE))                     # milliseconds
         runs, total = phrases(track.get('notes') or [])
         length = max(0.0, total - start) * spb + TAIL_SECONDS
-        out = np.zeros(int(round(length * SAMPLE_RATE)), dtype=np.float32)
+        out = np.zeros(int(round(length * SAMPLE_RATE)) + max(0, shift),
+                       dtype=np.float32)
         was_over = 0.0                   # where the phrase before this ended
         for at, run in runs:
             notes = []
@@ -816,7 +876,7 @@ class Engine(object):
             if at + span <= start:
                 continue                 # over and done with before the cursor
             ev = bend_events([(t * spb, v, sl) for t, v, sl in bends],
-                             at * spb, (at + span) * spb)
+                             at * spb, (at + span) * spb, detune)
             # render_live is what applies the bends; with no events it produces
             # the same samples as render, checked against it
             renderer = Renderer(program=program, bpm=bpm, voice=voice,
@@ -825,9 +885,9 @@ class Engine(object):
                                      lambda _t: bpm)
             if renderer.stopped_short:
                 self.stopped_short = True
-            i = int(round((at - start) * spb * SAMPLE_RATE))
-            if i < 0:                     # the phrase began before the cursor
-                y = y[-i:]
+            i = int(round((at - start) * spb * SAMPLE_RATE)) + shift
+            if i < 0:                     # the phrase began before the cursor,
+                y = y[-i:]                # or was moved back past the start
                 i = 0
             if not len(y):
                 continue

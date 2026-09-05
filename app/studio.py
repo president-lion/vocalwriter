@@ -1029,6 +1029,27 @@ class TrackDialog(wx.Dialog):
         labelled(self, outer, 'Pan', self.pan,
                  hint='-100 far left to 100 far right')
 
+        # What keeps a stack of parts from sounding like one voice played
+        # loudly. The engine sings a note dead in tune and dead on the beat
+        # every time, which is right for one part and wrong for six; these
+        # are how far this one is off, and a few of each is plenty.
+        self.detune = wx.SpinCtrl(
+            self, min=-project.DETUNE_RANGE, max=project.DETUNE_RANGE,
+            initial=int(getattr(track, 'detune', 0)), size=(80, -1))
+        # The engine's pitch moves in steps of about five cents (see
+        # ppc.engine.PITCH_STEP), so the arrows move in fives: every press
+        # changes what you hear, rather than four out of five doing nothing.
+        self.detune.SetIncrement(5)
+        labelled(self, outer, 'Detune', self.detune,
+                 hint='cents sharp or flat; the engine moves in steps of '
+                      'about five, and a semitone is a hundred')
+        self.offset = wx.SpinCtrl(
+            self, min=-project.OFFSET_RANGE, max=project.OFFSET_RANGE,
+            initial=int(getattr(track, 'offset', 0)), size=(80, -1))
+        self.offset.SetIncrement(5)
+        labelled(self, outer, 'Offset', self.offset,
+                 hint='milliseconds early or late; twenty is enough to hear')
+
         # A part can keep its own consonant length. Off by default, because
         # the song's setting is the right answer for most parts and one number
         # in one place is easier to reason about than one per track.
@@ -1116,7 +1137,12 @@ class TrackDialog(wx.Dialog):
         Both are None when the part is following the song, which is not the
         same as holding a copy of what the song currently says: a part that
         follows keeps following when the song settings change.
+
+        The detune and the offset are neither: they are the part's own, always,
+        and nothing but a number.
         """
+        track.detune = self.detune.GetValue()
+        track.offset = self.offset.GetValue()
         track.voice = (render.clean_voice(
             dict((k, c.GetValue()) for k, c in self.voice_ctrls.items()))
             if self.own_voice.GetValue() else None)
@@ -1484,10 +1510,10 @@ class Frame(wx.Frame):
         on = self.mi_auto_preview.IsChecked()
         self.settings['auto_preview'] = on
         kept = settings.save(self.settings)
-        self.say('previewing notes as they change is %s%s'
-                 % ('on' if on else 'off',
-                    '' if kept else ', for this sitting only: the settings '
-                    'file could not be written'))
+        self.announce_state('preview %s%s'
+                            % ('on' if on else 'off',
+                               '' if kept else ', for this sitting only: the '
+                               'settings file could not be written'))
 
     def preview_note(self, i):
         """Hear one note, once the nudging has stopped.
@@ -2293,6 +2319,8 @@ class Frame(wx.Frame):
                 voice=getattr(t, 'voice', None),
                 consonants=getattr(t, 'consonants', None),
                 reverb=getattr(t, 'reverb', None),
+                detune=getattr(t, 'detune', 0),
+                offset=getattr(t, 'offset', 0),
                 voice_id=self.track_voice(t), notes=notes)]
         return {'bpm': float(self.bpm),
                 'consonants': self.consonant_pct / 100.0,
@@ -2317,6 +2345,8 @@ class Frame(wx.Frame):
                 'voice_id': self.track_voice(t),
                 'volume': t.volume / 100.0,
                 'pan': t.pan / 100.0,
+                'detune': int(getattr(t, 'detune', 0)),
+                'offset': int(getattr(t, 'offset', 0)),
                 'voice': dict(voice or {}),
                 'reverb': (None if own_reverb is None
                            else {'room': own_reverb[0], 'wet': own_reverb[1]}),
@@ -2798,6 +2828,7 @@ class Frame(wx.Frame):
             pan=t['pan'], mute=t['mute'], solo=t['solo'],
             voice=t.get('voice'), consonants=t.get('consonants'),
             reverb=t.get('reverb'), voice_id=t.get('voice_id'),
+            detune=t.get('detune', 0), offset=t.get('offset', 0),
             notes=[Note(ph, pitch, beats, word, bend)
                    for ph, pitch, beats, word, bend in t['rows']])
             for t in tracks]

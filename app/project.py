@@ -53,6 +53,22 @@ BEND_EPSILON = 0.01          # semitones below which a point is not worth keepin
 DEFAULT_SIG = (4, 4)
 
 
+#: How far a part may be put out of tune, in cents, and off the beat, in
+#: milliseconds. Both are deliberately small. A part a whole semitone flat is
+#: not a human singer, it is a mistake, and a part a whole beat late is not
+#: either -- what is wanted here is the amount by which two people singing the
+#: same line are never quite the same, which is a few of each.
+DETUNE_RANGE = 50
+OFFSET_RANGE = 250
+
+
+def _clamp(value, limit, fallback=0):
+    try:
+        return max(-limit, min(limit, int(round(float(value)))))
+    except (TypeError, ValueError):
+        return fallback
+
+
 class Track(object):
     """One part of a song: its own voice, its own level, its own notes.
 
@@ -67,7 +83,8 @@ class Track(object):
 
     def __init__(self, name='', program=0, volume=100, pan=0,
                  mute=False, solo=False, notes=None, voice=None,
-                 consonants=None, reverb=None, voice_id=None):
+                 consonants=None, reverb=None, voice_id=None,
+                 detune=0, offset=0):
         self.name = name
         #: which program change this part used to be, kept for songs written
         #: down before voices were chosen out of the bank by name
@@ -97,6 +114,14 @@ class Track(object):
         #: A part sung fast wants shorter consonants than one held slowly, and
         #: that is a property of the part rather than of the song.
         self.consonants = None if consonants is None else float(consonants)
+        #: How far off this part sings, in cents, and how far off the beat
+        #: it comes in, in milliseconds. Both nothing by default, and both
+        #: small when they are anything: two parts in perfect tune and perfect
+        #: time are one part twice as loud, which is what makes a bank of them
+        #: sound like a machine. A few cents and a few milliseconds apart is
+        #: what two people singing the same line actually are.
+        self.detune = _clamp(detune, DETUNE_RANGE)
+        self.offset = _clamp(offset, OFFSET_RANGE)
         #: which note was last selected here, so that moving between tracks
         #: comes back to where you were. Not saved: it is not part of the song.
         self.cursor = 0
@@ -215,6 +240,11 @@ def _track_doc(t):
         doc['reverb'] = {'room': int(t.reverb[0]), 'wet': int(t.reverb[1])}
     if getattr(t, 'consonants', None) is not None:
         doc['consonants'] = float(t.consonants)
+    # Written only when they are something, so a song that has never been
+    # humanised is the file it always was.
+    for key in ('detune', 'offset'):
+        if getattr(t, key, 0):
+            doc[key] = int(getattr(t, key))
     return doc
 
 
@@ -281,6 +311,8 @@ def _read_track(doc, index=0):
             'pan': max(-100, min(100, _int(doc.get('pan'), 0))),
             'mute': bool(doc.get('mute')),
             'solo': bool(doc.get('solo')),
+            'detune': _clamp(doc.get('detune', 0), DETUNE_RANGE),
+            'offset': _clamp(doc.get('offset', 0), OFFSET_RANGE),
             'rows': _rows(doc.get('notes') or [])}
 
 
