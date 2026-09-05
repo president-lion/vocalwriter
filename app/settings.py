@@ -26,6 +26,10 @@ DEFAULTS = {
     #: land on the grid the brush describes, rather than adding a brushful to
     #: whatever length the note happens to have
     'snap': True,
+    #: in the pitch bend editor, up and down set the pitch where the cursor is
+    #: and make a marker there. Off, they move the cursor and a marker is made
+    #: with Space and a typed number, which is how it worked first.
+    'envelope_arrows': True,
 }
 
 

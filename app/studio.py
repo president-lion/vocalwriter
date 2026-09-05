@@ -75,6 +75,7 @@ ID_PLAY, ID_HEAR, ID_STOP, ID_KEYS = (wx.NewIdRef() for _ in range(4))
 ID_ADD_REST, ID_IMPORT, ID_EXPORT = (wx.NewIdRef() for _ in range(3))
 ID_AUTO_PREVIEW = wx.NewIdRef()
 ID_SNAP = wx.NewIdRef()
+ID_ENVELOPE_ARROWS = wx.NewIdRef()
 ID_EXPORT_TRACKS = wx.NewIdRef()
 ID_BAR_REST, ID_GOTO_BAR, ID_METRONOME = (wx.NewIdRef() for _ in range(3))
 ID_PLAY_PAUSE, ID_PLAY_HERE, ID_PANES = (wx.NewIdRef() for _ in range(3))
@@ -909,6 +910,22 @@ class EnvelopeDialog(wx.Dialog):
     imported from MIDI can be finer than that in *time*, so opening one here
     rounds it; the note editor's Pitch bend button is still the way to see one
     of those exactly, and this says so when it has had to round.
+
+    There is always a marker at the start. A note whose bend begins somewhere
+    in the middle starts on whatever the note before it left behind, which is
+    not this note's to say and is not what anybody drawing a shape means; and
+    with one there, every position through the note has a value, so the scrub
+    can say what the pitch is doing everywhere rather than only after the
+    first thing you wrote. It costs nothing: a lone marker at the start, still
+    on the note, is no bend at all and is written down as none. Control and
+    Delete takes it away for the note that really does want to inherit.
+
+    Up and down set the pitch where the cursor is, making a marker there if
+    there is not one, starting from what the bend already does at that point.
+    Drawing a shape is then two keys -- along, and up -- rather than a dialog
+    and a typed number per point. Shift and Space still types one, for a value
+    the arrows would take a while to reach, and the whole of the older way is
+    a setting away (Settings, Set envelope markers with the arrow keys).
     """
 
     #: What each number key jumps to. Nought is the far end, not the near one,
@@ -918,10 +935,18 @@ class EnvelopeDialog(wx.Dialog):
     JUMPS = {'1': 10, '2': 20, '3': 30, '4': 40, '5': 50,
              '6': 60, '7': 70, '8': 80, '9': 90, '0': 100}
 
+    #: how far a press moves, plainly and with Shift held
+    ALONG, ALONG_FAST = 1, 5
+    UP, UP_FAST = 1.0, 2.0
+
     def __init__(self, parent, studio, note):
         wx.Dialog.__init__(self, parent, title='Pitch bend envelope')
         self.studio = studio
         self.note = note
+        self.arrows = bool(studio.settings.get('envelope_arrows', True))
+        #: the pending preview, so that running the arrow along the note asks
+        #: for one render when it stops rather than one per position
+        self._sounding = None
         #: per cent through the note -> semitones. A dictionary because a
         #: position either has a marker or has not, and because scrubbing
         #: asks that question a hundred times a second.
@@ -933,6 +958,8 @@ class EnvelopeDialog(wx.Dialog):
                 rounded += 1
             self.markers[max(0, min(100, k))] = float(value)
         self.rounded = rounded
+        #: the note starts where the note starts
+        self.markers.setdefault(0, 0.0)
 
         outer = wx.BoxSizer(wx.VERTICAL)
         self.list = ReportList(self, style=wx.LC_REPORT | wx.LC_SINGLE_SEL,
@@ -942,13 +969,7 @@ class EnvelopeDialog(wx.Dialog):
         self.list.Bind(wx.EVT_KEY_DOWN, self.on_key)
         caption(self, outer, 'Through the note', self.list)
 
-        outer.Add(wx.StaticText(
-            self, label='Left and right move. Space sets a marker, Delete '
-                        'removes one.\nJ and K jump back and forward marker '
-                        'to marker. The number keys jump by tens, and the '
-                        'key left of the 1 goes to the start.\nF plays the '
-                        'note. Shift+Delete clears the bend.'),
-            0, wx.ALL, 6)
+        outer.Add(wx.StaticText(self, label=self.instructions()), 0, wx.ALL, 6)
         outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL),
                   0, wx.EXPAND | wx.ALL, 8)
         self.SetSizerAndFit(outer)
@@ -957,6 +978,21 @@ class EnvelopeDialog(wx.Dialog):
 
     # -- what a position says ---------------------------------------------
 
+    def instructions(self):
+        """The line of help under the list, which depends on the setting."""
+        if self.arrows:
+            return ('Left and right move, up and down set the pitch and make '
+                    'a marker.\nHold Shift to move by five per cent or by two '
+                    'semitones.\nJ and K jump back and forward marker to '
+                    'marker. The number keys jump by tens, and the key left '
+                    'of the 1 goes to the start.\nSpace or F plays the note. '
+                    'Shift+Space types a value. Delete removes a marker, '
+                    'Shift+Delete clears the bend.')
+        return ('Left and right move. Space sets a marker, Delete removes '
+                'one.\nJ and K jump back and forward marker to marker. The '
+                'number keys jump by tens, and the key left of the 1 goes to '
+                'the start.\nF plays the note. Shift+Delete clears the bend.')
+
     def value_at(self, k):
         """The semitones at `k` per cent, or None where nothing says.
 
@@ -964,7 +1000,8 @@ class EnvelopeDialog(wx.Dialog):
         line between them -- the same line the engine is given. After the last
         marker it holds. Before the first there is nothing to hold: the note
         starts whatever the note before it left behind, which is not this
-        note's to say.
+        note's to say -- and there is always a marker at the start, so in
+        practice this answers everywhere.
         """
         if not self.markers:
             return None
@@ -1028,14 +1065,23 @@ class EnvelopeDialog(wx.Dialog):
         code = evt.GetKeyCode()
         shift = evt.ShiftDown()
         k = self.cursor()
+        along = self.ALONG_FAST if shift else self.ALONG
         if code == wx.WXK_LEFT:
-            self.go_to(k - 1)
+            self.go_to(k - along)
         elif code == wx.WXK_RIGHT:
-            self.go_to(k + 1)
-        elif code == wx.WXK_SPACE:
+            self.go_to(k + along)
+        elif code in (wx.WXK_UP, wx.WXK_DOWN) and self.arrows:
+            by = self.UP_FAST if shift else self.UP
+            self.shift_pitch(k, by if code == wx.WXK_UP else -by)
+        elif code == wx.WXK_SPACE and (shift or not self.arrows):
             self.set_marker(k)
+        elif code == wx.WXK_SPACE:
+            self.on_preview()
         elif code in (wx.WXK_DELETE, wx.WXK_NUMPAD_DELETE, wx.WXK_BACK):
-            self.clear() if shift else self.drop_marker(k)
+            if shift:
+                self.clear()
+            else:
+                self.drop_marker(k, forced=evt.ControlDown())
         elif code == ord('J'):
             self.jump(k, -1)
         elif code == ord('K'):
@@ -1052,8 +1098,53 @@ class EnvelopeDialog(wx.Dialog):
         else:
             evt.Skip()
 
+    def shift_pitch(self, k, by):
+        """Up and down: the pitch here, a semitone or two from what it is.
+
+        From what the bend already does at this point, not from nothing: the
+        line through here is what you are hearing, and a semitone up means a
+        semitone up from that. A position with no marker gets one; a position
+        with one has it moved.
+
+        What is said depends on which of those it was. A new marker is
+        announced outright, because a marker appearing is a thing that
+        happened; a marker that moved is the row re-read, which says the same
+        words with none of them wasted on news.
+        """
+        base = self.value_at(k)
+        want = round((0.0 if base is None else base) + by, 3)
+        value = max(-BEND_LIMIT, min(BEND_LIMIT, want))
+        if value == self.markers.get(k):
+            self.studio.announce_state(
+                '%s, as far as the engine will bend' % semitone_text(value),
+                self.list)
+            return
+        fresh = k not in self.markers
+        self.markers[k] = value
+        self.refresh_from(k)
+        if fresh:
+            self.studio.announce_state(
+                'marker added, %d per cent, %s' % (k, semitone_text(value)),
+                self.list)
+        else:
+            reannounce(self.list, k)
+        self.sound()
+
+    def sound(self):
+        """Play the note as it now stands, if notes are previewed at all.
+
+        The same setting the note list uses (Ctrl+Shift+P) and the same wait:
+        running the arrow up a fifth is nine presses, and nine renders played
+        over one another is not a preview of anything.
+        """
+        if not self.studio.settings.get('auto_preview'):
+            return
+        if self._sounding is not None and self._sounding.IsRunning():
+            self._sounding.Stop()
+        self._sounding = wx.CallLater(PREVIEW_WAIT, self.on_preview)
+
     def set_marker(self, k):
-        """Space: ask what the pitch does here, and put it here."""
+        """Space, or Shift+Space: type what the pitch does here."""
         at = self.markers.get(k)
         with SemitoneDialog(self, k,
                             '' if at is None else '%g' % round(at, 3)) as dlg:
@@ -1079,24 +1170,52 @@ class EnvelopeDialog(wx.Dialog):
         # the cursor has not moved, so nothing has been said: the row under it
         # changed underneath it, which is what reannounce is for
         reannounce(self.list, k)
+        self.sound()
 
-    def drop_marker(self, k):
+    def drop_marker(self, k, forced=False):
+        """Delete: take the marker here away. The first one needs asking twice.
+
+        The marker at the start is what makes the note begin where it is
+        written rather than wherever the note before it finished, so Delete
+        landing on it is almost always Delete landing on it by accident.
+        Control and Delete is the way to mean it.
+        """
         if k not in self.markers:
             self.studio.announce_state('no marker here', self.list)
+            return
+        if k == 0 and not forced:
+            self.studio.announce_state(
+                'this is where the note starts. Control and Delete takes it '
+                'away, and then the note begins on whatever the note before '
+                'it ended on', self.list)
             return
         del self.markers[k]
         self.refresh_from(k)
         self.studio.announce_state(
             'marker at %d per cent removed, %d left'
             % (k, len(self.markers)), self.list)
+        self.sound()
 
     def clear(self):
-        if not self.markers:
+        """Shift+Delete: no bend at all, which is the starting marker alone."""
+        if not self.bent():
             self.studio.announce_state('there is no bend to clear', self.list)
             return
         self.markers.clear()
+        self.markers[0] = 0.0
         self.refresh_from(0)
         self.studio.announce_state('bend cleared', self.list)
+        self.sound()
+
+    def bent(self):
+        """Whether anything has actually been drawn.
+
+        A single marker at the start, still on the note, is what an untouched
+        note looks like in here -- it is put there on the way in -- and it has
+        to mean no bend on the way out, or opening this dialog and closing it
+        again would give every note it was opened on a bend it did not have.
+        """
+        return bool(self.markers) and self.markers != {0: 0.0}
 
     def jump(self, k, way):
         """J and K: to the next marker along, or the one before."""
@@ -1121,6 +1240,8 @@ class EnvelopeDialog(wx.Dialog):
             self.studio.play_audio(res)
 
     def result(self):
+        if not self.bent():
+            return []
         return [(k / 100.0, self.markers[k]) for k in sorted(self.markers)]
 
 
@@ -1849,6 +1970,13 @@ class Frame(wx.Frame):
             'Alt with the arrows lands on the brush\'s own grid rather than '
             'adding a brushful to what is there')
         self.mi_snap.Check(bool(self.settings.get('snap', True)))
+        self.mi_envelope_arrows = prefs.AppendCheckItem(
+            ID_ENVELOPE_ARROWS,
+            'Set envelope markers with the &arrow keys\tCtrl+Shift+E',
+            'In the pitch bend editor, up and down set the pitch where the '
+            'cursor is. Off, they move the cursor and Space types a value')
+        self.mi_envelope_arrows.Check(
+            bool(self.settings.get('envelope_arrows', True)))
         bar.Append(prefs, '&Settings')
         bar.Append(help_, '&Help')
         self.SetMenuBar(bar)
@@ -1895,6 +2023,7 @@ class Frame(wx.Frame):
                                (wx.ID_PREFERENCES, self.on_song_settings),
                                (ID_AUTO_PREVIEW, self.on_auto_preview),
                                (ID_SNAP, self.on_snap),
+                               (ID_ENVELOPE_ARROWS, self.on_envelope_arrows),
                                (wx.ID_EXIT, lambda e: self.Close())):
             self.Bind(wx.EVT_MENU, handler, id=ident)
 
@@ -1948,6 +2077,21 @@ class Frame(wx.Frame):
                 self.say('consonants %s the beat'
                          % ('before' if self.anticipate else 'after'))
         dlg.Destroy()
+
+    def on_envelope_arrows(self, _evt):
+        """Ctrl+Shift+E: which way the bend editor's arrows work.
+
+        Read when the editor opens rather than while it is open, so that the
+        keys do not change under someone halfway through drawing a shape.
+        """
+        on = self.mi_envelope_arrows.IsChecked()
+        self.settings['envelope_arrows'] = on
+        kept = settings.save(self.settings)
+        self.announce_state(
+            'envelope arrows %s%s'
+            % ('on' if on else 'off',
+               '' if kept else ', for this sitting only: the settings file '
+               'could not be written'), self.list)
 
     def on_snap(self, _evt):
         """Ctrl+Shift+G: land on the grid, or add to what is there.
@@ -2040,10 +2184,12 @@ class Frame(wx.Frame):
                      '3 thirty-second, 4 quarter, 5 quarter triplet, '
                      '6 sixteenth, 7 sixteenth triplet, 8 eighth, '
                      '9 eighth triplet',
-                     'Alt+Enter  draw this note\'s pitch bend: scrub '
-                     'through the note with the arrow keys, Space sets a '
-                     'marker, J and K jump back and forward between them, '
-                     'F plays it',
+                     'Alt+Enter  draw this note\'s pitch bend: left and '
+                     'right scrub through the note, up and down set the pitch '
+                     'and make a marker, J and K jump between them, Space or '
+                     'F plays it. Shift moves five per cent or two semitones',
+                     'Ctrl+Shift+E  set envelope markers with the arrow keys, '
+                     'or off to move with them and type values with Space',
                      'Space  play from the note the cursor is on, or stop '
                      'if it is playing',
                      'Ctrl+P  play every track from the start',
