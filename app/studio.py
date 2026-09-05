@@ -2248,13 +2248,19 @@ class Frame(wx.Frame):
     def on_play_stop(self, _evt):
         """Space: play from the cursor, or stop if it is already going.
 
+        A reverb tail ringing on after a stop does not count as the song still
+        going. The song is over; what is left is the room. So space during the
+        tail starts the song again rather than stopping the tail -- pressing
+        play and getting silence, because a decay nobody was waiting for was
+        still sounding, is not what the key is for.
+
         Ctrl+Space still toggles a row's selection, which is what space does in
         a list; that is the one thing given up for this.
         """
         if self.rendering:
             self.say('still rendering')
             return
-        if self.player.state() == PLAYING:
+        if self.player.state() == PLAYING and not self.ringing:
             self.stop_audio(ring=True)
             self.say('stopped')
             return
@@ -2554,14 +2560,34 @@ class Frame(wx.Frame):
                     ' from %s' % os.path.basename(was) if was else ''))
 
     def may_discard(self, what):
-        """Ask before throwing away unsaved work. True to go ahead."""
+        """Offer to save unsaved work first. True to go ahead with `what`.
+
+        Three buttons, and now three different answers: save it and carry on,
+        carry on without saving it, or do neither. The question used to be
+        "%s anyway?" over the same three buttons, which left No and Cancel
+        saying the same thing -- answering No to closing put you back in the
+        window exactly as Cancel did, and nothing told you which you had
+        pressed or why the program was still open. Nobody wanting to close
+        without saving could get out that way; the question they were being
+        asked was not the question they thought they were answering.
+
+        Yes that cannot save -- the Save As dialog closed, the disk refused --
+        counts as Cancel. Going on would throw the work away, which is the one
+        thing the person who pressed Yes has said they do not want.
+        """
         if not self.dirty or not any(t.notes for t in self.tracks):
             return True
+        doing = what[0].lower() + what[1:]
         answer = wx.MessageBox(
-            'This song has changes that have not been saved. %s anyway?'
-            % what, 'VocalWriter Studio',
+            'This song has changes that have not been saved.\n\n'
+            'Save them before you %s?' % doing,
+            'VocalWriter Studio',
             wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION, self)
-        return answer == wx.YES
+        if answer == wx.CANCEL:
+            return False
+        if answer == wx.YES:
+            return bool(self.on_save(None))
+        return True                      # No: leave the changes behind
 
     def take(self, bpm, tracks, path=None, sig=None, consonants=None,
              voice=None, reverb=None, anticipate=True):
@@ -2626,6 +2652,7 @@ class Frame(wx.Frame):
                     sum(len(t.notes) for t in self.tracks), bpm))
 
     def on_save(self, _evt):
+        """True if the song is on disk afterwards, which closing wants to know."""
         if self.path:
             return self.write_project(self.path)
         return self.on_save_as(None)
@@ -2635,11 +2662,11 @@ class Frame(wx.Frame):
                            defaultFile='song' + project.SUFFIX,
                            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as dlg:
             if dlg.ShowModal() != wx.ID_OK:
-                return
+                return False           # thought better of it
             path = dlg.GetPath()
         if not path.lower().endswith(project.SUFFIX):
             path += project.SUFFIX
-        self.write_project(path)
+        return self.write_project(path)
 
     def write_project(self, path):
         try:
@@ -2648,13 +2675,14 @@ class Frame(wx.Frame):
                          self.song_voice, self.song_reverb, self.anticipate)
         except OSError as exc:
             self.say('could not save: %s' % exc)
-            return
+            return False
         self.path = path
         self.touch(dirty=False)
         self.say('saved %s: %d track%s, %d notes'
                  % (os.path.basename(path), len(self.tracks),
                     '' if len(self.tracks) == 1 else 's',
                     sum(len(t.notes) for t in self.tracks)))
+        return True
 
     # -- MIDI --------------------------------------------------------------
 
