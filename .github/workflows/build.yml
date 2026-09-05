@@ -117,6 +117,14 @@ jobs:
           print('plain: %.2f s' % res['seconds'])
           assert res['seconds'] > 1.0
 
+          # Playing asks for no file and must write none: the editor plays the
+          # samples themselves, and a render that quietly went back to leaving
+          # a WAV behind would be the old behaviour creeping back in.
+          play = eng.render({'bpm': 100, 'tracks': [part()]})
+          assert 'path' not in play, 'a render with no destination wrote a file'
+          assert len(play['audio']) > 44100, play['audio'].shape
+          print('playback: %d samples, no file' % len(play['audio']))
+
           strings = voices.index('Strings')
           y, peak = eng._samples({'bpm': 100, 'reverb': {'room': 40, 'wet': 24},
                                   'tracks': [part(voice_id=strings, pan=-0.5)]})

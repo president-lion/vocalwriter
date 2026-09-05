@@ -90,7 +90,12 @@ class Engine(object):
     def program_voices(self, programs, cb):
         self.send('program_voices', cb, programs=list(programs))
 
-    def render(self, song, out, cb):
+    def render(self, song, cb, out=None):
+        """Sing a song. The samples come back in the callback's result.
+
+        `out` writes a WAV as well, and is what exporting passes. Playing does
+        not: there is no file in the way of hearing a song any more.
+        """
         self.send('render', cb, song=song, out=out)
 
     def close(self):

@@ -9,17 +9,21 @@ hundredths of a second, so there is nothing left to put behind a process
 boundary: this is imported and called.
 
 What it holds is worth holding: the voice bank, the dictionary and the shared
-tables are read once, and rendered audio is kept under a key made from the
-song, so playing the same thing twice renders once.
+tables are read once, and rendered audio is kept in memory under a key made
+from the song, so playing the same thing twice renders once.
+
+The audio comes back as samples. It used to come back as a path -- every
+render went to a file, and playing a song meant writing one and handing it to
+a player that could only read files. Nothing here needs that: the mix is an
+array by the time it is finished, the player takes an array, and a file is
+written only when somebody asks for one by name, which is what exporting is.
 """
+import collections
 import hashlib
 import json          # only for the cache key
 import math
 import os
-import shutil
 import sys
-import tempfile
-import wave
 
 import numpy as np
 
@@ -36,6 +40,12 @@ from tools.ttvi import load as load_ttvi, phoneme_order      # noqa: E402
 
 
 PALETTE_FILE = paths.bundled('emu', 'phoneme_palette.json')
+
+#: How much rendered audio to keep in memory. Stereo float samples are 345 KB
+#: a second, so this is about twelve minutes of singing -- enough that an
+#: afternoon of playing the same song back never renders it twice, and bounded
+#: so that an afternoon of playing different ones does not grow without end.
+CACHE_BYTES = 256 * 1024 * 1024
 
 #: the palette was read out of the running application, and spells two
 #: phonemes differently from the engine's own table
@@ -347,17 +357,15 @@ class Engine(object):
         self._lex = None
         self._voices = None
         self._palette = None
-        #: key -> length in seconds. The audio itself lives in `cache_dir`
-        #: under the key, never at the caller's path: callers reuse paths (the
-        #: note preview always writes the same file), so an entry pointing at
-        #: one would go on claiming a hit after a later render had overwritten
-        #: it, and hand back the wrong audio.
-        self._cache = {}
+        #: key -> (samples, peak, whether it stopped short). A render costs
+        #: seconds and hearing the same thing twice should cost none, so the
+        #: mix is kept rather than the file it used to be written to. The
+        #: oldest goes when the total passes CACHE_BYTES.
+        self._cache = collections.OrderedDict()
         #: voice -> how far it has to be turned down, worked out once
         self._headroom = {}
         #: whether the last render ended early, for the caller to pass on
         self.stopped_short = False
-        self.cache_dir = os.path.join(tempfile.gettempdir(), 'vocalwriter-cache')
 
     @property
     def lex(self):
@@ -459,14 +467,15 @@ class Engine(object):
         song = {'bpm': 120, 'program': program,
                 'notes': [{'pitch': pitch, 'beats': beats,
                            'phonemes': [phoneme]}]}
-        if out is None:
-            import tempfile
-            out = os.path.join(tempfile.gettempdir(),
-                               'vw_preview_%s_%d.wav'
-                               % (phoneme.replace('%', 'rest'), pitch))
         return self.render(song, out)
 
-    def render(self, song, out):
+    def render(self, song, out=None):
+        """Sing a song, and hand back the samples.
+
+        `out` writes them to a WAV as well, and is what exporting passes. It
+        is not what playing passes: the caller gets the mix itself under
+        'audio', one column or two, and plays it out of memory.
+        """
         # The metronome is mixed on afterwards and is deliberately left out of
         # the key, so switching it on and off never re-sings the song.
         metro = song.get('metronome') or None
@@ -475,28 +484,40 @@ class Engine(object):
         # everything that changes the samples.
         key = hashlib.sha256(
             json.dumps(core, sort_keys=True).encode()).hexdigest()
-        kept = os.path.join(self.cache_dir, key + '.wav')
         hit = self._cache.get(key)
-        if hit is not None and os.path.isfile(kept):
-            # A hit still has to deliver to the caller's filename, or saving a
-            # song that has already been played writes nothing and reports
-            # success.
-            seconds, peak = hit
-            return {'seconds': seconds, 'peak': peak, 'cached': True,
-                    'path': self._deliver(kept, out, metro, core)}
+        if hit is not None:
+            self._cache.move_to_end(key)
+            y, peak, short = hit
+            cached = True
+        else:
+            y, peak = self._samples(core)
+            short = self.stopped_short
+            self._remember(key, y, peak, short)
+            cached = False
+        audio = self._ticked(y, metro, core)
+        res = {'seconds': len(y) / float(SAMPLE_RATE), 'peak': peak,
+               'cached': cached, 'stopped_short': short,
+               'audio': audio, 'rate': SAMPLE_RATE}
+        if out is not None:
+            write_wav(out, audio)
+            res['path'] = out
+        return res
 
-        y, peak = self._samples(core)
-        seconds = len(y) / float(SAMPLE_RATE)
-        try:
-            os.makedirs(self.cache_dir, exist_ok=True)
-            write_wav(kept, y)
-            self._cache[key] = (seconds, peak)
-            where = self._deliver(kept, out, metro, core)
-        except OSError:                      # no cache: still give the caller
-            write_wav(out, self._ticked(y, metro, core))   # the audio anyway
-            where = out
-        return {'seconds': seconds, 'peak': peak, 'path': where,
-                'cached': False, 'stopped_short': self.stopped_short}
+    def _remember(self, key, y, peak, short):
+        """Keep this render, and drop the oldest until the total fits.
+
+        A song longer than the whole allowance is simply not kept: making room
+        for it would mean throwing away everything else to hold one thing that
+        would itself be thrown away by the next render.
+        """
+        if y.nbytes > CACHE_BYTES:
+            return
+        self._cache[key] = (y, peak, short)
+        self._cache.move_to_end(key)
+        total = sum(v[0].nbytes for v in self._cache.values())
+        while total > CACHE_BYTES and len(self._cache) > 1:
+            _old, (dropped, _p, _s) = self._cache.popitem(last=False)
+            total -= dropped.nbytes
 
     @staticmethod
     def _ticked(y, metro, song):
@@ -694,30 +715,6 @@ class Engine(object):
                     [out, np.zeros(i + len(y) - len(out), dtype=np.float32)])
             out[i:i + len(y)] += y
         return out
-
-    @classmethod
-    def _deliver(cls, kept, out, metro=None, song=None):
-        """Put the audio where the caller asked, and say where it ended up.
-
-        Windows refuses to write a file that something else has open, and the
-        thing most likely to have this one open is the player that just played
-        it. Rather than fail the whole render over that, the caller is handed
-        the copy in the cache, which is the same audio.
-        """
-        try:
-            if metro:
-                with wave.open(kept) as w:
-                    channels = w.getnchannels()
-                    y = (np.frombuffer(w.readframes(w.getnframes()), '<i2')
-                         .astype(np.float32) / 32768.0)
-                if channels > 1:
-                    y = y.reshape(-1, channels)
-                write_wav(out, cls._ticked(y, metro, song or {}))
-            elif os.path.abspath(kept) != os.path.abspath(out):
-                shutil.copyfile(kept, out)
-            return out
-        except OSError:
-            return kept
 
 
 if __name__ == '__main__':

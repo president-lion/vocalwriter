@@ -21,10 +21,8 @@ render that has already been done returns the cached audio at once.
 import math
 import os
 import sys
-import tempfile
 
 import wx
-import wx.adv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -425,7 +423,7 @@ class PhonemePicker(wx.Dialog):
     def _done(self, res):
         self.preview.Enable()
         if res:
-            self.studio.play_file(res['path'])
+            self.studio.play_audio(res)
 
 
 class AddWordDialog(wx.Dialog):
@@ -623,13 +621,13 @@ class AddWordDialog(wx.Dialog):
         self.studio.say('previewing %s'
                         % ', '.join(n.text() for n in self.rows))
         self.studio.engine.render(
-            self.studio.song(self.rows), self.studio.preview_wav,
+            self.studio.song(self.rows),
             lambda res: wx.CallAfter(self._heard, res))
 
     def _heard(self, res):
         self.hear.Enable()
         if res:
-            self.studio.play_file(res['path'])
+            self.studio.play_audio(res)
 
     def result(self):
         return list(self.rows)
@@ -761,13 +759,13 @@ class BendDialog(wx.Dialog):
         note = Note(self.note.phonemes, self.note.pitch, self.note.beats,
                     self.note.word, self.result())
         self.studio.engine.render(
-            self.studio.song([note]), self.studio.preview_wav,
+            self.studio.song([note]),
             lambda res: wx.CallAfter(self._heard, res))
 
     def _heard(self, res):
         self.hear.Enable()
         if res:
-            self.studio.play_file(res['path'])
+            self.studio.play_audio(res)
 
     def result(self):
         return sorted(self.points, key=lambda pt: pt[0])
@@ -841,13 +839,13 @@ class NoteDialog(wx.Dialog):
         note = self.result()
         self.studio.say('previewing %s' % (note.text() or 'nothing'))
         self.studio.engine.render(
-            self.studio.song([note]), self.studio.preview_wav,
+            self.studio.song([note]),
             lambda res: wx.CallAfter(self._done, res))
 
     def _done(self, res):
         self.hear.Enable()
         if res:
-            self.studio.play_file(res['path'])
+            self.studio.play_audio(res)
 
     def on_points(self, _evt):
         """Hand the whole curve over to be edited point by point."""
@@ -1118,9 +1116,6 @@ class Frame(wx.Frame):
         self._switching = False
         self.voice_names = ['Robert']
         self.palette = []
-        self.wav = os.path.join(tempfile.gettempdir(), 'vw_studio.wav')
-        self.preview_wav = os.path.join(tempfile.gettempdir(), 'vw_note.wav')
-        self.sound = None
         self.player = Player()
         self.rendering = False
         self.path = None            # the project file, once it has one
@@ -1443,7 +1438,7 @@ class Frame(wx.Frame):
             return
         self.stop_audio()
         self.rendering = True
-        self.engine.render(self.song([note]), self.preview_wav,
+        self.engine.render(self.song([note]),
                            lambda res: wx.CallAfter(self._heard, res))
 
     def on_keys(self, _evt):
@@ -2221,7 +2216,7 @@ class Frame(wx.Frame):
         self.stop_audio()
         self.rendering = True
         self.say('rendering one note')
-        self.engine.render(self.song([self.notes[i]]), self.preview_wav,
+        self.engine.render(self.song([self.notes[i]]),
                            lambda res: wx.CallAfter(self._heard, res))
 
     def _heard(self, res):
@@ -2230,7 +2225,7 @@ class Frame(wx.Frame):
             self.say('note is %.2f seconds%s'
                      % (res.get('seconds', 0),
                         ' from cache' if res.get('cached') else ''))
-            self.play_file(res['path'])
+            self.play_audio(res)
 
     def start_beats(self):
         """Where Space starts from: the note the cursor is on.
@@ -2277,7 +2272,7 @@ class Frame(wx.Frame):
         total = max(sum(n.beats for n in t.notes) for t in live)
         if start >= total - 1e-9:
             start = 0.0                    # past the end: start again instead
-        self.stop_audio()          # the file cannot be written while it plays
+        self.stop_audio()          # one song at a time
         self.rendering = True
         self.mi_play.Enable(False)
         bar, beat = project.bar_and_beat(start, self.signature())
@@ -2285,7 +2280,7 @@ class Frame(wx.Frame):
                  % (len(live), '' if len(live) == 1 else 's', bar,
                     round(beat, 2),
                     (total - start) * 60.0 / self.bpm))
-        self.engine.render(self.playback(start), self.wav,
+        self.engine.render(self.playback(start),
                            lambda res: wx.CallAfter(self._played, res))
 
     def _played(self, res):
@@ -2308,28 +2303,24 @@ class Frame(wx.Frame):
         self.say('playing %.2f seconds%s%s'
                  % (res.get('seconds', 0),
                     ' from cache' if res.get('cached') else '', loud))
-        self.play_file(res['path'])
+        self.play_audio(res)
 
-    def play_file(self, path):
-        """Play a WAV through the player, which can also pause it."""
-        if not os.path.isfile(path):
-            self.say('no audio file to play')
+    def play_audio(self, res):
+        """Play what a render came back with, out of memory.
+
+        It used to be handed a filename, because the render had been written
+        to one; now it is handed the samples themselves. Nothing is said on
+        success: whatever asked for the sound has already said what it is
+        about to play, and a second announcement over the top of the singing
+        helps nobody.
+        """
+        audio = (res or {}).get('audio')
+        if audio is None or not len(audio):
+            self.say('there is no audio to play')
             return
-        size = os.path.getsize(path)
-        try:
-            if self.player.play(path):
-                self.say('playing %s, %d KB' % (os.path.basename(path),
-                                                size // 1024))
-                return
-            # nothing native: wx will at least make a noise
-            self.sound = wx.adv.Sound(path)
-            if not self.sound.IsOk():
-                raise RuntimeError('the file could not be opened')
-            self.sound.Play(wx.adv.SOUND_ASYNC)
-            self.say('playing %s, %d KB' % (os.path.basename(path),
-                                            size // 1024))
-        except Exception as exc:
-            self.say('cannot play (%s). The file is at %s' % (exc, path))
+        if not self.player.play(audio, res.get('rate', 44100)):
+            self.say('cannot play: no sound output this program knows how to '
+                     'open. Exporting to a WAV still works.')
 
     def stop_audio(self):
         try:
@@ -2354,10 +2345,11 @@ class Frame(wx.Frame):
             path = dlg.GetPath()
         self.say('rendering to %s' % os.path.basename(path))
         self.engine.render(
-            self.song(), path,
+            self.song(),
             lambda res: wx.CallAfter(self.say, 'wrote %s, %.2f seconds'
                                      % (os.path.basename(path),
-                                        (res or {}).get('seconds', 0))))
+                                        (res or {}).get('seconds', 0))),
+            out=path)
 
     def export_jobs(self, folder):
         """(track, where it goes) for each track, with no two files alike.
@@ -2430,8 +2422,9 @@ class Frame(wx.Frame):
         self.say('rendering %s, %d of %d'
                  % (os.path.basename(path), i + 1, len(jobs)))
         self.engine.render(
-            self.song(tracks=[jobs[i][0]]), path,
-            lambda res: wx.CallAfter(self._exported, jobs, i, written, res))
+            self.song(tracks=[jobs[i][0]]),
+            lambda res: wx.CallAfter(self._exported, jobs, i, written, res),
+            out=path)
 
     def _exported(self, jobs, i, written, res):
         _track, path = jobs[i]
