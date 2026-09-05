@@ -1,0 +1,284 @@
+# Makefile for dapi/src/ph/ for Dectalk software for x86_64-apple-macos 
+#
+# 001 ETT 10/22/1998 moved to autoconf system. 
+#
+
+#### Start of system configuration section. ####  
+
+# where is the standard include dir? (cross compile critical)
+STD_INCLUDE=/usr/include/
+# which compiler do we use?
+CC=/usr/bin/gcc
+# to debug or not to debug?
+DEBUG_FLAGS= -g -arch x86_64
+# how much optomization do we use?
+OPTO_FLAGS=-O2
+# how many silly compile warnings do we want?
+WARN_FLAGS= -Wall
+# what do we define?
+DEFINES= -DLTSSIM -D_APPLE_MAC_ -D_MAC_OSX_ -D_APPLE_MAC_64BIT_ -DNO_SESSION -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic
+# include mme stuff?
+MME_DIR=.
+
+#### End of system configuration section. #### 
+
+RM=rm -f
+
+API_DIR     = ../../dapi
+CMD_DIR     = ../cmd
+DIC_DIR     = ../../dic
+INCLUDE_DIR = ../include
+KERNEL_DIR  = ../kernel
+LTS_DIR     = ../lts
+NT_DIR      = ../../shared/include
+OSF_DIR     = ../../shared/include/osf
+PH_DIR      = ../ph
+PROTOS_DIR  = ../../plat/unix/include
+VTM_DIR     = ../vtm
+HL_DIR      = ../hlsyn
+DECTALKF_H  = ../../sdk/include/unix
+
+
+INCLUDES= -I$(INCLUDE_DIR) -I$(API_DIR) -I$(CMD_DIR) -I$(DIC_DIR) -I$(KERNEL_DIR) \
+	  -I$(LTS_DIR) -I$(NT_DIR) -I$(OSF_DIR) -I$(PH_DIR) -I$(DECTALKF_H)\
+	  -I$(HL_DIR) \
+          -I$(PROTOS_DIR) -I$(VTM_DIR) -I$(MME_DIR) -I$(STD_INCLUDE) 
+
+CFLAGS= $(DEBUG_FLAGS) $(OPTO_FLAGS) $(WARN_FLAGS) $(INCLUDES) $(DEFINES)
+
+
+PH_SRC = p_uk_sr1.c p_uk_sy1.c ph_drwt02.c ph_fr_inton2.c ph_inton2.c \
+	 ph_intonnew.c p_ch_sr1.c p_ch_st1.c p_ch_sy1.c p_ch_tim.c \
+	 p_fr_sr1.c p_fr_st1.c p_fr_sy1.c p_fr_tim.c p_gr_sr1.c p_gr_st1.c \
+	 p_gr_tim.c p_he_st1.c p_he_tim.c p_it_st1.c p_it_sy1.c p_it_tim.c \
+	 p_jp_sr1.c p_jp_st1.c p_jp_sy1.c p_jp_tim.c p_kr_sr1.c p_kr_st1.c \
+	 p_kr_sy1.c p_kr_tim.c p_krnew_tim.c p_la_sr1.c p_la_st1.c \
+	 p_la_sy1.c p_la_tim.c p_sp_sr1.c p_sp_st1.c p_sp_sy1.c p_sp_tim.c \
+	 p_uk_st1.c p_uk_tim.c p_us_sr1.c p_us_st1.c p_us_sy1.c p_us_tim.c \
+	 ph_aloph.c ph_claus.c ph_draw.c ph_main.c ph_romi.c ph_setar.c \
+	 ph_sort.c ph_sort2.c ph_sttr2.c ph_syl.c ph_task.c ph_timng.c \
+	 ph_vdefi.c ph_vset.c phinit.c phlog.c phprint.c
+
+PH_OBJ= $(OUTPUT_DIR)/p_uk_sr1.o $(OUTPUT_DIR)/p_uk_sy1.o \
+	$(OUTPUT_DIR)/ph_drwt02.o $(OUTPUT_DIR)/ph_fr_inton2.o \
+	$(OUTPUT_DIR)/ph_inton2.o $(OUTPUT_DIR)/ph_intonnew.o \
+	$(OUTPUT_DIR)/p_ch_sr1.o $(OUTPUT_DIR)/p_ch_st1.o \
+	$(OUTPUT_DIR)/p_ch_sy1.o $(OUTPUT_DIR)/p_ch_tim.o \
+	$(OUTPUT_DIR)/p_fr_sr1.o $(OUTPUT_DIR)/p_fr_st1.o \
+	$(OUTPUT_DIR)/p_fr_sy1.o $(OUTPUT_DIR)/p_fr_tim.o \
+	$(OUTPUT_DIR)/p_gr_sr1.o $(OUTPUT_DIR)/p_gr_st1.o \
+	$(OUTPUT_DIR)/p_gr_tim.o $(OUTPUT_DIR)/p_he_st1.o \
+	$(OUTPUT_DIR)/p_he_tim.o $(OUTPUT_DIR)/p_it_st1.o \
+	$(OUTPUT_DIR)/p_it_sy1.o $(OUTPUT_DIR)/p_it_tim.o \
+	$(OUTPUT_DIR)/p_jp_sr1.o $(OUTPUT_DIR)/p_jp_st1.o \
+	$(OUTPUT_DIR)/p_jp_sy1.o $(OUTPUT_DIR)/p_jp_tim.o \
+	$(OUTPUT_DIR)/p_kr_sr1.o $(OUTPUT_DIR)/p_kr_st1.o \
+	$(OUTPUT_DIR)/p_kr_sy1.o $(OUTPUT_DIR)/p_kr_tim.o \
+	$(OUTPUT_DIR)/p_krnew_tim.o $(OUTPUT_DIR)/p_la_sr1.o \
+	$(OUTPUT_DIR)/p_la_st1.o $(OUTPUT_DIR)/p_la_sy1.o \
+	$(OUTPUT_DIR)/p_la_tim.o $(OUTPUT_DIR)/p_sp_sr1.o \
+	$(OUTPUT_DIR)/p_sp_st1.o $(OUTPUT_DIR)/p_sp_sy1.o \
+	$(OUTPUT_DIR)/p_sp_tim.o $(OUTPUT_DIR)/p_uk_st1.o \
+	$(OUTPUT_DIR)/p_uk_tim.o $(OUTPUT_DIR)/p_us_sr1.o \
+	$(OUTPUT_DIR)/p_us_st1.o $(OUTPUT_DIR)/p_us_sy1.o \
+	$(OUTPUT_DIR)/p_us_tim.o $(OUTPUT_DIR)/ph_aloph.o \
+	$(OUTPUT_DIR)/ph_claus.o $(OUTPUT_DIR)/ph_draw.o \
+	$(OUTPUT_DIR)/ph_main.o $(OUTPUT_DIR)/ph_romi.o \
+	$(OUTPUT_DIR)/ph_setar.o $(OUTPUT_DIR)/ph_sort.o \
+	$(OUTPUT_DIR)/ph_sort2.o $(OUTPUT_DIR)/ph_sttr2.o \
+	$(OUTPUT_DIR)/ph_syl.o $(OUTPUT_DIR)/ph_task.o \
+	$(OUTPUT_DIR)/ph_timng.o $(OUTPUT_DIR)/ph_vdefi.o \
+	$(OUTPUT_DIR)/ph_vset.o $(OUTPUT_DIR)/phinit.o \
+	$(OUTPUT_DIR)/phlog.o $(OUTPUT_DIR)/phprint.o
+
+
+all:: $(PH_OBJ)
+
+$(OUTPUT_DIR)/p_uk_sr1.o:p_uk_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_uk_sy1.o:p_uk_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_drwt02.o:ph_drwt02.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_fr_inton2.o:ph_fr_inton2.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_inton2.o:ph_inton2.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_intonnew.o:ph_intonnew.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_ch_sr1.o:p_ch_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_ch_st1.o:p_ch_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_ch_sy1.o:p_ch_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_ch_tim.o:p_ch_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_fr_sr1.o:p_fr_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_fr_st1.o:p_fr_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_fr_sy1.o:p_fr_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_fr_tim.o:p_fr_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_gr_sr1.o:p_gr_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_gr_st1.o:p_gr_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_gr_tim.o:p_gr_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_he_st1.o:p_he_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_he_tim.o:p_he_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_it_st1.o:p_it_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_it_sy1.o:p_it_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_it_tim.o:p_it_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_jp_sr1.o:p_jp_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_jp_st1.o:p_jp_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_jp_sy1.o:p_jp_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_jp_tim.o:p_jp_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_kr_sr1.o:p_kr_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_kr_st1.o:p_kr_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_kr_sy1.o:p_kr_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_kr_tim.o:p_kr_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_krnew_tim.o:p_krnew_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_la_sr1.o:p_la_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_la_st1.o:p_la_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_la_sy1.o:p_la_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_la_tim.o:p_la_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_sp_sr1.o:p_sp_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_sp_st1.o:p_sp_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_sp_sy1.o:p_sp_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_sp_tim.o:p_sp_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_uk_st1.o:p_uk_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_uk_tim.o:p_uk_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_us_sr1.o:p_us_sr1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_us_st1.o:p_us_st1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_us_sy1.o:p_us_sy1.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/p_us_tim.o:p_us_tim.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_aloph.o:ph_aloph.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_claus.o:ph_claus.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_draw.o:ph_draw.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_main.o:ph_main.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_romi.o:ph_romi.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_setar.o:ph_setar.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_sort.o:ph_sort.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_sort2.o:ph_sort2.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_sttr2.o:ph_sttr2.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_syl.o:ph_syl.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_task.o:ph_task.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_timng.o:ph_timng.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_vdefi.o:ph_vdefi.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/ph_vset.o:ph_vset.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/phinit.o:phinit.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/phlog.o:phlog.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+$(OUTPUT_DIR)/phprint.o:phprint.c
+	$(CC) -c $(CFLAGS) -o $@ $?
+
+clean::
+	rm $(OUTPUT_DIR)/*.o

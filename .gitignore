@@ -69,3 +69,65 @@ env/
 *.swp
 .DS_Store
 Thumbs.db
+
+# The DECtalk source archives, unpacked. What is kept is the source: the C,
+# the headers, the makefiles and project files, the scripts, the phoneme and
+# dictionary tables, the notes. What is dropped is everything a compiler made
+# and everything too big to belong in a git repository -- object files and
+# libraries, precompiled headers and browse databases, executables and DLLs,
+# the .svn pristine copies that duplicate every source file beside it, and the
+# inner zips, PostScript and PDF that came along for the ride. They are still
+# on disk in the working copy; they are simply not ours to publish and not
+# worth 4 GB of history.
+DECtalk source code archive/*.zip
+DECtalk source code archive/**/.svn/
+DECtalk source code archive/**/*.obj
+DECtalk source code archive/**/*.o
+DECtalk source code archive/**/*.a
+DECtalk source code archive/**/*.lib
+DECtalk source code archive/**/*.pch
+DECtalk source code archive/**/*.sbr
+DECtalk source code archive/**/*.bsc
+DECtalk source code archive/**/*.exe
+DECtalk source code archive/**/*.dll
+DECtalk source code archive/**/*.dylib
+DECtalk source code archive/**/*.so
+DECtalk source code archive/**/*.pdb
+DECtalk source code archive/**/*.ilk
+DECtalk source code archive/**/*.idb
+DECtalk source code archive/**/*.ncb
+DECtalk source code archive/**/*.dep
+DECtalk source code archive/**/*.cod
+DECtalk source code archive/**/*.res
+DECtalk source code archive/**/*.aps
+DECtalk source code archive/**/*.plg
+DECtalk source code archive/**/*.opt
+DECtalk source code archive/**/*.tlb
+DECtalk source code archive/**/*.ocx
+DECtalk source code archive/**/*.msi
+DECtalk source code archive/**/*.sys
+DECtalk source code archive/**/*.drv
+DECtalk source code archive/**/*.vxd
+DECtalk source code archive/**/*.zip
+DECtalk source code archive/**/*.tar
+DECtalk source code archive/**/*.cab
+DECtalk source code archive/**/*.ps
+DECtalk source code archive/**/*.pdf
+DECtalk source code archive/**/*.doc
+DECtalk source code archive/**/*.docx
+DECtalk source code archive/**/*.hlp
+DECtalk source code archive/**/*.wav
+DECtalk source code archive/**/*.au
+DECtalk source code archive/**/*.aiff
+DECtalk source code archive/**/*.gif
+DECtalk source code archive/**/*.bmp
+DECtalk source code archive/**/*.ico
+DECtalk source code archive/**/*.png
+DECtalk source code archive/**/*.jpg
+DECtalk source code archive/**/*.jpeg
+DECtalk source code archive/**/*.tif
+DECtalk source code archive/**/*.mov
+DECtalk source code archive/**/*.avi
+DECtalk source code archive/**/*.bin
+DECtalk source code archive/**/*.img
+DECtalk source code archive/**/*.iso

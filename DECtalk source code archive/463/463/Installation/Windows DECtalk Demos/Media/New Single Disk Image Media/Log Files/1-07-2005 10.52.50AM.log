@@ -1,0 +1,34 @@
+Build started at 01/07/05 10:52:50.
+Calculating size of cabinet files...
+Copying uncompressed setup files...
+Compressing engine files...
+Preprocessing data for data1.hdr...
+Processing registries...
+Building cabinet file data1.hdr...
+Building cabinet file data1.cab...
+Building cabinet file data2.cab...
+Creating disk layout file 'layout.bin'...
+Creating self-extracting exe...
+Start Package Log File ----------
+Build started at  January 07, 2005  10:52:54
+Output package: D:\work\PRODUCT\Installation\Windows DECtalk Demos\Media\New Single Disk Image Media\Package\Disk1\DTDemos_win32.exe
+Creating cabinet
+     File 'data1.cab' added
+     File 'data1.hdr' added
+     File 'data2.cab' added
+     File 'ikernel.ex_' added
+     File 'layout.bin' added
+     File 'setup.bmp' added
+     File 'Setup.exe' added
+     File 'Setup.ini' added
+     File 'setup.inx' added
+     File 'vssver.scc' added
+Creating executable
+     Storing run-time data
+     Appending data to stub
+     Appending cabinet
+Build completed at  January 07, 2005  10:53:00
+End Package Log File ------------
+Build finished at 01/07/05 10:53:00.
+
+New Single Disk Image Media - 0 error(s), 0 warning(s)

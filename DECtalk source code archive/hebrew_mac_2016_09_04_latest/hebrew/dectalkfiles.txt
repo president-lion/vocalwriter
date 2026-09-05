@@ -1,0 +1,411 @@
+SOURCE=..\..\..\dapicore\hlsyn\acxf1c.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\brent.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\circuit.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_char.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_cmd.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_copt.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_main.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_pars.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_phon.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_text.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cm_util.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\Cmd_init.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\cmd_wav.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\DAPI\CRYPT2.C
+# End Source File
+# Begin Source File
+
+SOURCE=..\src\dbgwins.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\DAPI\DECSTD97.C
+# End Source File
+# Begin Source File
+
+SOURCE=.\dectalk.def
+# End Source File
+# Begin Source File
+
+SOURCE=..\src\DTFnxExStdlib.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\hlframe.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\inithl.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\LTS\l_us_cha.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\log10table.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\shared\src\mmalloc.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\nasalf1x.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\shared\src\opthread.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_ch_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_ch_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_ch_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_ch_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_fr_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_fr_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_fr_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_fr_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_gr_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_gr_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_gr_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_he_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_he_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_it_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_it_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_it_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_jp_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_jp_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_jp_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_jp_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_kr_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_kr_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_kr_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_kr_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_krnew_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_la_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_la_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_la_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_la_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_sp_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_sp_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_sp_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_sp_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\P_UK_SR1.C
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_uk_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\P_UK_SY1.C
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_uk_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_us_sr1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_us_st1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_us_sy1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\p_us_tim.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\par_ambi.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\par_char.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\par_dict.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\par_pars1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\CMD\par_rule.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_aloph.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_claus.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_draw.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\Ph_drwt02.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\Ph_fr_inton2.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\Ph_inton2.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\Ph_intonnew.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_main.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_romi.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_setar.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_sort.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_sort2.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_sttr2.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_syl.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_task.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_timng.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_vdefi.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\ph_vset.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\phinit.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\phlog.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\PH\phprint.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\shared\src\pipe.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\shared\src\playaud.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\VTM\playtone.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\KERNEL\services.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\shared\src\spc.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\hlsyn\sqrttable.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\VTM\sync.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\DAPI\ttsapi.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\KERNEL\Usa_init.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\VTM\vtm3.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\..\dapicore\VTM\vtmiont.c
+# End Source File
+# End Group

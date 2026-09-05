@@ -1,0 +1,6 @@
+[:phon arpa on] [:volume set 99] [:index start 250]  [:name paul] [:lang he]
+ [:comma -40] [:period -140] [:volume att 90] [:rate 60][:mode reading on]
+ [jh-][V AHY -][:index mark 2]['H IY, ][:index mark 8][-]
+[:index mark 9][M IY-][:index mark 10]['KKEYT S  ][:index mark 13][-]
+[:index mark 14][SHAX-][:index mark 30][N AH-][:index mark 16]['T AH-]
+[:index mark 17][Y IYM ][:index mark 18][Y AH-][:index mark 19]['M IYM , ][JH]

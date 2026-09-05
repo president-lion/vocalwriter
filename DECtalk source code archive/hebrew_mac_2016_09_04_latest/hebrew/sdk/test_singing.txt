@@ -1,0 +1,13 @@
+[:phon arpa on] [:volume set 99] [:index start 250]  [:name paul][:dv hs 105] 
+[:lang he] [:comma -40] [:period -140] [:volume att 90] [:rate 290]
+[:mode reading on] 
+[jh-] [:index mark 0][K <,123>IY<181,123> ][:index mark 1] [T <,123>EY<181,123> ][:index mark 2][T S <,147>"EY<271,147>JH<10,> ] [:index mark 3][L <,147>AH<136,147> ] [:index mark 4]
+[MM<,148>IY<136,147>L <,147> ] [:index mark 5][CH<,147>AH<136,147> ][:index mark 6][M <,165>"AH<181,165>-] 
+[:index mark 7] ["AH<136,196>-][FO<136,201>][GT<146,213>" A3<156,123>]
+ [:index mark 8]["AH<181,147> ]
+[:index mark 9] ["AH<136,196>-] 
+ [:index mark 10]["AH<181,147> ]
+[:index mark 11] ["AH<136,196>-] 
+[JH][:index mark 13]
+[:sync]
+

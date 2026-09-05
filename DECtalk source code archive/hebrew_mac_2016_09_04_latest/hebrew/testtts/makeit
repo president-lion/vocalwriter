@@ -1,0 +1,16 @@
+#!/bin/sh
+
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/gcc -c -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk -g -arch armv7 -O2 -Wno-pointer-sign -I. -I/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.1.sdk/usr/include -DLTSSIM -D_IOS61_ -D_IOS_ -D_APPLE_MAC_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -DENGLISH -DENGLISH_US -DACNA -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic   -o tts_test_ios.o tts_test.c
+
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin/gcc -c -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator6.1.sdk -g -arch i386 -O2 -Wno-pointer-sign -I. -I/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimumator.platform/Developer/SDKs/iPhoneSimulator6.1.sdk/usr/include -DLTSSIM -D_IOS61_ -D_IOS_ -D_IOSSIMULATOR_ -D_APPLE_MAC_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -DENGLISH -DENGLISH_US -DACNA -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic   -o tts_test_iossim.o tts_test.c
+
+ar ruvs libtts_iossim.a tts_test_iossim.o
+
+ar ruvs libtts_ios.a tts_test_ios.o
+
+lipo -create libtts_ios.a libtts_iossim.a -output libtts.a
+
+cp libtts.a App/ios/dtTTS/
+
+
+

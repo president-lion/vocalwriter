@@ -1,0 +1,1054 @@
+dnl
+dnl Configure template for DECtalk
+dnl this is a comment.  Weird huh?
+dnl *********************************************************************
+dnl *   File Name:      configure.in
+dnl *   Author:		Eric Thompson
+dnl *   Creation Date:	10/22/1998
+dnl *
+dnl *   Functionality:
+dnl *  	Process this file with autoconf to produce a configure script. 
+dnl *	The configure script produces various Makefile from various Makefile.in
+dnl *
+dnl *********************************************************************
+dnl *    Revision History:
+dnl *
+dnl *  Rev  Who		Date		Description
+dnl *  ---  ------	-----------	----------------------------------
+dnl *  000  ETT		10/22/1998	produces Makefiles for x86 linux (elf)
+dnl *  001  ETT		11/04/1998	produces Makefiles for alpha linux
+dnl *  002  ETT		11/17/1998	arm linux for the itsy (aout)
+dnl *  003  ET		11/23/1998	Digital Unix 4.0[d,e]
+dnl *  004  ETT		11/24/1998	fix linux again
+dnl *  005  ETT		12/04/1998	added stuff for speak, etc.
+dnl *  006  ETT		12/07/1998	added yet another variable for osf
+dnl *							SO_LOCATIONS, I tell ya...
+dnl *  007  NAL         04/10/2000      Added stuff for gspeakdemos
+dnl *  008  MGS         05/26/2000      Added windict stuff
+dnl *  009  MGS		03/29/2001	Added stuff for french and windic and ml location
+dnl *  010  MGS		06/19/2001	Solaris Port BATS#972
+dnl *********************************************************************
+dnl * see: http://www.sdsu.edu/doc/texi/autoconf_toc.html 
+dnl * for help and documentation.
+
+dnl AC_REVISION([configure.in 0.01])   
+
+dnl AC_INIT always has to be first. except AC_REVISION
+dnl the filename specified here is just so that autoconf
+dnl is sure that this is _actually_ the src dir
+AC_INIT(dectalkf.h)
+
+dnl Determine the system type and set output variables to the names 
+dnl of the canonical system types.
+dnl build, host, target 
+dnl      the canonical system names; 
+dnl build_alias, host_alias, target_alias 
+dnl      the names user specified, or canonical names from config.guess 
+dnl build_cpu, build_vendor, build_os 
+dnl host_cpu, host_vendor, host_os 
+dnl target_cpu, target_vendor, target_os 
+dnl      the individual parts of the canonical names (for convenience). 
+AC_CANONICAL_SYSTEM
+dnl AC_CANONICAL_SYSTEM requires config.guess and config.sub shell scripts
+
+dnl Determine a C compiler to use. If CC is not already set in the environment,
+dnl check for gcc, and use cc if that's not found. Set output variable CC 
+dnl to the name of the compiler found.  
+AC_PROG_CC
+case "$target" in
+	arm-ipaq-linux-*) CC="/skiff/local/bin/arm-linux-gcc" ;;
+	arm-*-linux-*) CC="/usr/local/arm/3.4.1/bin/arm-linux-gcc" ;;
+	armv5-apple-*) CC="/usr/bin/gcc" ;;
+	armv6-apple-*) CC="/usr/bin/gcc" ;;
+	armv7-apple-*) CC="/usr/bin/gcc" ;;
+	armv8-apple-*) CC="/usr/bin/gcc" ;;
+	armv9-apple-*) CC="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/gcc" ;;
+	armv0-apple-*) CC="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/bin/gcc" ;;
+	powerpc-apple-*) CC="/usr/bin/gcc" ;;
+	i386-apple-*) CC="/usr/bin/gcc" ;;
+	x86_64-apple-*) CC="/usr/bin/gcc" ;;
+	powerpc-*-linux-*) CC="/opt/eldk/usr/bin/ppc-linux-gcc" ;;
+	powerpc-*-nto-*) CC="qcc -V2.95.3,gcc_ntoppcbe" ;;
+	*-*-nto-*) CC="qcc" ;;
+dnl use the itsy cross compiler.
+esac
+
+dnl If the C compiler does not accept the `-c' and `-o' options 
+dnl simultaneously, define NO_MINUS_C_MINUS_O. 
+AC_PROG_CC_C_O
+
+dnl Set output variable CPP to a command that runs the C preprocessor. 
+dnl If `$CC -E' doesn't work, it uses `/lib/cpp'. It is only portable 
+dnl to run CPP on files with a `.c' extension.
+dnl AC_PROG_CPP
+
+dnl If `ln -s' works on the current filesystem, set output variable LN_S 
+dnl to `ln -s', otherwise set it to `ln'.
+AC_PROG_LN_S 
+case "$target" in
+	sparc-sun-*) LN_S="ln -f -s" ;;
+	i386*-solaris*) LN_S="ln -f -s"  ;;
+	powerpc-apple-*) LN_S="ln -f -s"  ;;
+	i386-apple-*) LN_S="ln -f -s"  ;;
+	x86_64-apple-*) LN_S="ln -f -s"  ;;
+	armv5-apple-*) LN_S="ln -f -s"  ;;
+	armv6-apple-*) LN_S="ln -f -s"  ;;
+	armv7-apple-*) LN_S="ln -f -s"  ;;
+	armv8-apple-*) LN_S="ln -f -s"  ;;
+	arm-ipaq-linux-*) LN_S="ln -f -s"  ;;
+	arm-*-linux-*) LN_S="ln -f -s"  ;;
+	powerpc-*-linux-*) LN_S="ln -f -s"  ;;
+	*-*-linux-*) LN_S="ln -f -s"  ;;
+	powerpc-*-nto-*) LN_S="ln -f -s"  ;;
+	*-*-nto-*) LN_S="ln -f -s"  ;;
+esac
+
+dnl Set output variable RANLIB to `ranlib' if ranlib is found, 
+dnl otherwise to `:' (do nothing). 
+AC_PROG_RANLIB 
+case "$target" in
+	arm-ipaq-linux-*) RANLIB="/skiff/local/bin/arm-linux-ranlib" ;;
+	arm-*-linux-*) RANLIB="/usr/local/arm/3.4.1/bin/arm-linux-ranlib" ;;
+	powerpc-*-linux-*) RANLIB="/opt/eldk/usr/bin/ppc-linux-ranlib" ;;
+dnl use the itsy ranlib.
+esac
+
+dnl these are single backquotes!
+dnl OS_VERSION=`uname -srm`
+OS_VERSION=`uname -r`
+case "$target" in 
+	powerpc-apple-*) OS_VERSION="ppc-"`uname -r` ;;
+	armv5-apple-*) OS_VERSION="armv6sim-"`uname -r` ;;
+	armv6-apple-*) OS_VERSION="armv7sim-"`uname -r` ;;
+	armv7-apple-*) OS_VERSION="armv7-"`uname -r` ;;
+	armv8-apple-*) OS_VERSION="arm64-"`uname -r` ;;
+	i386-apple-*) OS_VERSION="intel-"`uname -r` ;;
+	x86_64-apple-*) OS_VERSION="intel64-"`uname -r` ;;
+esac
+AC_SUBST(OS_VERSION)dnl
+
+dnl don't put a slash on the end of this dir.  
+dnl it shouldn't matter but why chance it?
+BUILD_DIR=`pwd`"/dapi/build"
+case "$target" in
+	arm-ipaq-linux-*) BUILD_DIR=`pwd`"/dapi/build" ;;
+	arm-itsy-linux-*) BUILD_DIR=`pwd`"/dapi/build" ;;
+esac
+AC_SUBST(BUILD_DIR)dnl
+
+DEFINES=" -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" 
+case "$target" in
+	sparc-sun-*) DEFINES=" -DLTSSIM -D_SPARC_SOLARIS_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	i386*-solaris*) DEFINES=" -DLTSSIM -D_INTEL_SOLARIS_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	powerpc-apple-*) DEFINES=" -DLTSSIM -D_APPLE_MAC_ -DNO_SESSION -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	armv5-apple-*) DEFINES=" -DLTSSIM -D_IOS61_ -D_IOS_ -D_IOSSIMULATOR_ -D_APPLE_MAC_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	armv6-apple-*) DEFINES=" -DLTSSIM -D_IOS61_ -D_IOS_ -D_IOSSIMULATOR_ -D_IOS_64BIT_ -D_APPLE_MAC_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	armv7-apple-*) DEFINES=" -DLTSSIM -D_IOS61_ -D_IOS_ -D_APPLE_MAC_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	armv8-apple-*) DEFINES=" -DLTSSIM -D_IOS61_ -D_IOS_ -D_IOS_64BIT_ -D_APPLE_MAC_ -D_BIGENDIAN_ -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	i386-apple-*) DEFINES=" -DLTSSIM -D_APPLE_MAC_ -D_MAC_OSX_ -DNO_SESSION -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	x86_64-apple-*) DEFINES=" -DLTSSIM -D_APPLE_MAC_ -D_MAC_OSX_ -D_APPLE_MAC_64BIT_ -DNO_SESSION -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN -DMACOS_STATIC -dynamic" ;;
+	arm-ipaq-linux-*) DEFINES=" -D_REENTRANT -D_GNU_SOURCE -DNOMME -D__ipaq__ -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	arm-*-linux-*) DEFINES=" -D_REENTRANT -D_GNU_SOURCE -DNOMME -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	powerpc-*-linux-*) DEFINES=" -D_REENTRANT -DNOMME -D_BIGENDIAN_ -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	*-*-linux-*) DEFINES=" -D_REENTRANT -DNOMME -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	powerpc-*-nto-*) DEFINES=" -D_REENTRANT -DNOMME -D_BIGENDIAN_ -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+	*-*-nto-*) DEFINES=" -D_REENTRANT -DNOMME -DLTSSIM -DTTSSIM -DANSI -DBLD_DECTALK_DLL -D\$(LANGUAGE) -DACCESS32 -DTYPING_MODE -DNO_INCLUDED_C_FILES -DNEW_MULTI_LANG_ARCH -DMULTIPLE_LANGUAGES_LOADED -DHLSYN" ;;
+esac
+AC_SUBST(DEFINES)dnl
+
+LICENSE_DEFINES=""
+case "$target" in
+	powerpc-*-linux-*) LICENSE_DEFINES="-D_BIGENDIAN_";;
+	*-*-linux-*) LICENSE_DEFINES="";;
+	sparc-sun-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_ -D_BIGENDIAN_";;
+	i386-*-solaris*) LICENSE_DEFINES="-D_INTEL_SOLARIS_ ";;
+	armv5-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_";;
+	armv6-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_";;
+	armv7-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_";;
+	armv8-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_";;
+	powerpc-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_ -D_BIGENDIAN_";;
+	i386-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_";;
+	x86_64-apple-*) LICENSE_DEFINES="-D_SPARC_SOLARIS_";;
+esac
+AC_SUBST(LICENSE_DEFINES)dnl
+
+LICENSE_ALL="\$(OUTPUT_DIR)/licenin1 \$(OUTPUT_DIR)/licenin3 \
+            \$(OUTPUT_DIR)/licenin7 \$(OUTPUT_DIR)/installer"
+case "$target" in
+	alpha-dec-osf*) LICENSE_ALL="";;
+	arm-*-linux-*) LICENSE_ALL="\$(OUTPUT_DIR)/licenin1 \$(OUTPUT_DIR)/licenin3 \$(OUTPUT_DIR)/licenin7 \$(OUTPUT_DIR)/arminstaller" ;;
+esac
+AC_SUBST(LICENSE_ALL)dnl
+	
+DEBUG_FLAGS=" -G3 -migrate"
+case "$target" in
+	arm-ipaq-linux-*) DEBUG_FLAGS=" -g -fPIC -D__ipaq__";;
+	arm-*-linux-*) DEBUG_FLAGS=" -g -fPIC";;
+	powerpc-*-linux-*) DEBUG_FLAGS=" -g -fPIC -D__powerpc__";;
+	*-*-linux-*) DEBUG_FLAGS=" -g" ;;
+	*-*-nto-*) DEBUG_FLAGS=" -g" ;;
+	*-*-solaris*) DEBUG_FLAGS=" -g" ;;
+	powerpc-apple-*) DEBUG_FLAGS=" -g -arch ppc" ;;
+	armv5-apple-*) DEBUG_FLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -g -arch i386 -mios-simulator-version-min=6.1" ;;
+	armv6-apple-*) DEBUG_FLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -g -arch x86_64 -mios-simulator-version-min=6.1" ;;
+	armv7-apple-*) DEBUG_FLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk -g -arch armv7 -mios-version-min=6.1" ;;
+	armv8-apple-*) DEBUG_FLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk -g -arch arm64 -mios-version-min=6.1 -Wno-implicit-function-declaration" ;;
+	i386-apple-*) DEBUG_FLAGS=" -g -arch i386" ;;
+	x86_64-apple-*) DEBUG_FLAGS=" -g -arch x86_64" ;;
+esac
+AC_SUBST(DEBUG_FLAGS)dnl
+
+LIB_FLAGS="" 
+case "$target" in
+	*-*-nto-*) LIB_FLAGS="-shared" ;;
+esac
+AC_SUBST(LIB_FLAGS)dnl
+
+OPTO_FLAGS=" -O2"
+case "$target" in
+	sparc-sun-*) OPTO_FLAGS="-O2" ;;
+esac
+AC_SUBST(OPTO_FLAGS)dnl
+
+PLATFORM_DEFS=""
+case "$target" in
+	powerpc-*-linux-*) PLATFORM_DEFS="-D_BIGENDIAN_" ;;
+	sparc-sun-*) PLATFORM_DEFS="-D_SPARC_SOLARIS_ -D_BIGENDIAN_" ;;
+	i386-*-solaris*) PLATFORM_DEFS="-D_INTEL_SOLARIS_" ;;
+	powerpc-apple-*) PLATFORM_DEFS="-D_BIGENDIAN_" ;;
+	armv5-apple-*) PLATFORM_DEFS="-isysroot /Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk" ;;
+	armv6-apple-*) PLATFORM_DEFS="-isysroot /Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk" ;;
+	armv7-apple-*) PLATFORM_DEFS="-isysroot /Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk" ;;
+	armv8-apple-*) PLATFORM_DEFS="-isysroot /Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk" ;;
+	i386-apple-*) PLATFORM_DEFS="" ;;
+	x86_64-apple-*) PLATFORM_DEFS="" ;;
+esac
+AC_SUBST(PLATFORM_DEFS)dnl
+
+ENDIAN_PARM=""
+case "$target" in
+	powerpc-*-linux-*) ENDIAN_PARM="/e:other" ;;
+esac
+AC_SUBST(ENDIAN_PARM)dnl
+
+ALIGN_OPT=""
+case "$target" in
+	sparc-sun-*) ALIGN_OPT="" ;;
+esac
+AC_SUBST(ALIGN_OPT)dnl
+
+WARN_FLAGS=" -threads -w1"
+case "$target" in
+	*-*-linux-*) WARN_FLAGS=" -Wall" ;;
+	*-*-nto-*) WARN_FLAGS=" -Wall" ;;
+	powerpc-apple-*) WARN_FLAGS=" -Wall" ;;
+	armv5-apple-*) WARN_FLAGS="-Wno-pointer-sign" ;;
+	armv6-apple-*) WARN_FLAGS="-Wno-pointer-sign" ;;
+	armv7-apple-*) WARN_FLAGS="-Wno-pointer-sign" ;;
+	armv8-apple-*) WARN_FLAGS="-Wno-pointer-sign" ;;
+	i386-apple-*) WARN_FLAGS=" -Wall" ;;
+	x86_64-apple-*) WARN_FLAGS=" -Wall" ;;
+	*-*-solaris*) WARN_FLAGS=" " ;;
+esac
+AC_SUBST(WARN_FLAGS)dnl
+
+PH_VTM_OPTO_FLAGS=" -O2"
+case "$target" in
+	arm-*-linux-*) PH_VTM_OPTO_FLAGS="" ;;
+	*-*-solaris*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	powerpc-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	armv5-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	armv6-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	armv7-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	armv8-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	i386-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+	x86_64-apple-*) PH_VTM_OPTO_FLAGS="-O2" ;;
+dnl for some reason the itsy ph and vtm files can't be optimized too far.
+esac
+AC_SUBST(PH_VTM_OPTO_FLAGS)dnl
+
+dnl the dictionary compiler must be built for host not target
+DIC_CC="gcc"
+case "$target" in
+	*-*-solaris*) DIC_CC="gcc" ;;
+	alpha-dec-osf*) DIC_CC="cc" ;;
+esac
+AC_SUBST(DIC_CC)dnl
+
+LD="ld"
+case "$target" in
+	arm-ipaq-linux-*) LD="/skiff/local/bin/arm-linux-ld" ;;
+	arm-*-linux-*) LD="/usr/local/arm/3.4.1/bin/arm-linux-ld" ;;
+	powerpc-*-linux-*) LD="/opt/eldk/usr/bin/ppc-linux-ld" ;;
+	powerpc-*-nto-*) LD="qcc -V2.95.3,gcc_ntoppcbe" ;;
+	*-*-nto-*) LD="qcc" ;;
+dnl use the itsy dynamic linker.
+esac
+AC_SUBST(LD)dnl
+
+AR="ar cqls"
+case "$target" in
+	arm-ipaq-linux-*) AR="/skiff/local/bin/arm-linux-ar cqls" ;;
+	arm-*-linux-*) AR="/usr/local/arm/3.4.1/bin/arm-linux-ar cqls" ;;
+	powerpc-*-linux-*) AR="/opt/eldk/usr/bin/ppc-linux-ar cqls" ;;
+	powerpc-apple-*) AR="ar ruvs" ;;
+	armv5-apple-*) AR="ar ruvs" ;;
+	armv6-apple-*) AR="ar ruvs" ;;
+	armv7-apple-*) AR="ar ruvs" ;;
+	armv8-apple-*) AR="ar ruvs" ;;
+	i386-apple-*) AR="ar ruvs" ;;
+	x86_64-apple-*) AR="ar ruvs" ;;
+dnl use the itsy archiver.
+esac
+AC_SUBST(AR)dnl
+
+STD_INCLUDE="/usr/include/"
+case "$target" in
+	arm-ipaq-linux-*) STD_INCLUDE="/skiff/local/arm-linux/include" ;;
+	arm-*-linux-*) STD_INCLUDE="/usr/local/arm/3.4.1/include" ;;
+	powerpc-*-linux-*) STD_INCLUDE="/opt/eldk/ppc_6xx/usr/include" ;;
+	armv5-apple-*) STD_INCLUDE="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimumator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include" ;;
+	armv6-apple-*) STD_INCLUDE="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimumator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include" ;;
+	armv7-apple-*) STD_INCLUDE="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include" ;;
+	armv8-apple-*) STD_INCLUDE="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/include" ;;
+dnl the itsy cross compiler knows where to get the std includes.
+esac
+AC_SUBST(STD_INCLUDE)dnl
+
+MME_DIR="."
+case "$target" in
+	alpha-dec-osf*) MME_DIR="/usr/include/mme" ;;
+esac
+AC_SUBST(MME_DIR)dnl
+
+LINUX_AUDIO=""
+case "$target" in
+	*-*-solaris*) LINUX_AUDIO="\$(OUTPUT_DIR)/linux_audio.o" ;;
+	powerpc-apple-*) LINUX_AUDIO="" ;;
+	armv5-apple-*) LINUX_AUDIO="" ;;
+	armv6-apple-*) LINUX_AUDIO="" ;;
+	armv7-apple-*) LINUX_AUDIO="" ;;
+	armv8-apple-*) LINUX_AUDIO="" ;;
+	i386-apple-*) LINUX_AUDIO="" ;;
+	x86_64-apple-*) LINUX_AUDIO="" ;;
+	*-*-linux-*) LINUX_AUDIO="\$(OUTPUT_DIR)/linux_audio.o" ;;
+	*-*-nto-*) LINUX_AUDIO="\$(OUTPUT_DIR)/qnx_audio.o" ;;
+esac
+AC_SUBST(LINUX_AUDIO)dnl
+
+LINK_LINUX_AUDIO=""
+case "$target" in
+	alpha-*-linux-*) LINK_LINUX_AUDIO="" ;;
+	powerpc-apple-*) LINK_LINUX_AUDIO="" ;;
+	armv5-apple-*) LINK_LINUX_AUDIO="" ;;
+	armv6-apple-*) LINK_LINUX_AUDIO="" ;;
+	armv7-apple-*) LINK_LINUX_AUDIO="" ;;
+	armv8-apple-*) LINK_LINUX_AUDIO="" ;;
+	i386-apple-*) LINK_LINUX_AUDIO="" ;;
+	x86_64-apple-*) LINK_LINUX_AUDIO="" ;;
+	*-*-solaris*) LINK_LINUX_AUDIO="\$(OUTPUT_DIR_2)/linux_audio.o" ;;
+	*-*-linux-*) LINK_LINUX_AUDIO="\$(OUTPUT_DIR_2)/linux_audio.o" ;;
+	*-*-nto-*) LINK_LINUX_AUDIO="\$(OUTPUT_DIR_2)/qnx_audio.o" ;;
+esac
+AC_SUBST(LINK_LINUX_AUDIO)dnl
+
+PLAYAUD="playaud.o"
+case "$target" in
+	i386-apple-*) PLAYAUD="playaud_mac.o" ;;
+	x86_64-apple-*) PLAYAUD="playaud_mac.o" ;;
+	powerpc-apple-*) PLAYAUD="playaud_mac.o" ;;
+	armv5-apple-*) PLAYAUD="playaud_ios.o" ;;
+	armv6-apple-*) PLAYAUD="playaud_ios.o" ;;
+	armv7-apple-*) PLAYAUD="playaud_ios.o" ;;
+	armv8-apple-*) PLAYAUD="playaud_ios.o" ;;
+esac
+AC_SUBST(PLAYAUD)dnl
+
+
+dnl	powerpc-apple-*) LINK_PORT_AUDIO="../shared/src/3rdParty/portaudio/lib/libportaudio.a" ;;
+dnl	i386-apple-*) LINK_PORT_AUDIO="../shared/src/3rdParty/portaudio/lib/libportaudio.a" ;;
+dnl	x86_64-apple-*) LINK_PORT_AUDIO="../shared/src/3rdParty/portaudio/lib/libportaudio.a" ;;
+
+LINK_PORT_AUDIO=""
+case "$target" in
+	alpha-*-linux-*) LINK_PORT_AUDIO="" ;;
+	powerpc-apple-*) LINK_PORT_AUDIO="" ;;
+	armv5-apple-*) LINK_PORT_AUDIO="" ;;
+	armv6-apple-*) LINK_PORT_AUDIO="" ;;
+	armv7-apple-*) LINK_PORT_AUDIO="" ;;
+	armv8-apple-*) LINK_PORT_AUDIO="" ;;
+	i386-apple-*) LINK_PORT_AUDIO="" ;;
+	x86_64-apple-*) LINK_PORT_AUDIO="" ;;
+	*-*-solaris*) LINK_PORT_AUDIO="" ;;
+	*-*-linux-*) LINK_PORT_AUDIO="" ;;
+esac
+AC_SUBST(LINK_PORT_AUDIO)dnl
+
+API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi.o \$(OUTPUT_DIR)/ttsapi_mme.o\
+          \$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/init.o \
+          \$(OUTPUT_DIR)/crypt2.o"
+case "$target" in
+	*-*-solaris*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+			\$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+			\$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+			\$(OUTPUT_DIR)/init_demo.o " ;;
+	powerpc-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+			\$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+			\$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+			\$(OUTPUT_DIR)/init_demo.o " ;;
+        armv5-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+                        \$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+                        \$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+                        \$(OUTPUT_DIR)/init_demo.o " ;;
+        armv6-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+                        \$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+                        \$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+                        \$(OUTPUT_DIR)/init_demo.o " ;;
+        armv7-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+                        \$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+                        \$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+                        \$(OUTPUT_DIR)/init_demo.o " ;;
+        armv8-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+                        \$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+                        \$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+                        \$(OUTPUT_DIR)/init_demo.o " ;;
+	i386-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+			\$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+			\$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+			\$(OUTPUT_DIR)/init_demo.o " ;;
+	x86_64-apple-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+			\$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+			\$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+			\$(OUTPUT_DIR)/init_demo.o " ;;
+	*-*-linux-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+			\$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+			\$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+			\$(OUTPUT_DIR)/init_demo.o " ;;
+	*-*-nto-*)API_OBJ_IN="\$(OUTPUT_DIR)/ttsapi_mme.o \
+			\$(OUTPUT_DIR)/decstd97.o \$(OUTPUT_DIR)/ttsapi_demo.o\
+			\$(OUTPUT_DIR)/init.o \$(OUTPUT_DIR)/crypt2.o \
+			\$(OUTPUT_DIR)/init_demo.o " ;;
+esac
+AC_SUBST(API_OBJ_IN)dnl
+
+ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(API_TTS_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)"
+case "$target" in
+	*-*-solaris*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+        powerpc-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+              \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	armv5-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	armv6-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	armv7-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	armv8-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	i386-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	x86_64-apple-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	*-*-linux-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+	*-*-nto-*)ALL_LIB_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \
+	      \$(LTS_OBJ) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+              \$(NT_MME_OBJ) \$(OSF_OBJ) \$(OSF_TTS_OBJ) \$(VTM_OBJ) \
+              \$(LTS_NORM_OBJS) \$(LTS_DEMO_OBJS)" ;;
+esac
+AC_SUBST(ALL_LIB_OBJS)dnl
+
+LIB_LN_S_A_DIR="/usr/lib"
+case "$target" in
+	arm-ipaq-linux-*)LIB_LN_S_A_DIR="/skiff/local/arm-linux/lib" ;;
+	arm-*-linux-*)LIB_LN_S_A_DIR="/usr/local/arm/3.4.1/arm-linux/lib" ;;
+	powerpc-*-linux-*)LIB_LN_S_A_DIR="/opt/eldk/ppc_6xx/usr/lib" ;;
+	*-*-linux-*)LIB_LN_S_A_DIR="/usr/local/lib" ;;
+	powerpc-*-nto-*)LIB_LN_S_A_DIR="/home/mschnee/lib" ;;
+	*-*-nto-*)LIB_LN_S_A_DIR="/usr/lib" ;;
+	armv5-apple-*)LIB_LN_S_A_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib" ;;
+	armv6-apple-*)LIB_LN_S_A_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib" ;;
+	armv7-apple-*)LIB_LN_S_A_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib" ;;
+	armv8-apple-*)LIB_LN_S_A_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib" ;;
+esac
+AC_SUBST(LIB_LN_S_A_DIR)dnl
+
+LIB_LN_S_SO_DIR="/usr/lib"
+case "$target" in
+	arm-ipaq-linux-*)LIB_LN_S_SO_DIR="/skiff/local/arm-linux/lib" ;;
+	arm-*-linux-*)LIB_LN_S_SO_DIR="/usr/local/arm/3.4.1/arm-linux/lib" ;;
+	powerpc-*-linux-*)LIB_LN_S_SO_DIR="/opt/eldk/ppc_6xx/usr/lib" ;;
+	*-*-linux-*)LIB_LN_S_SO_DIR="/usr/local/lib" ;;
+	powerpc-*-nto-*)LIB_LN_S_SO_DIR="/home/mschnee/lib" ;;
+	*-*-nto-*)LIB_LN_S_SO_DIR="/usr/lib" ;;
+	armv5-apple-*)LIB_LN_S_SO_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib" ;;
+	armv6-apple-*)LIB_LN_S_SO_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib" ;;
+	armv7-apple-*)LIB_LN_S_SO_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib" ;;
+	armv8-apple-*)LIB_LN_S_SO_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib" ;;
+esac
+AC_SUBST(LIB_LN_S_SO_DIR)dnl
+
+INC_LN_S_DIR="/usr/include/dtk"
+case "$target" in
+	arm-ipaq-linux-*)INC_LN_S_DIR="/skiff/local/arm-linux/include/dtk" ;;
+	arm-*-linux-*)INC_LN_S_DIR="/usr/local/arm/3.4.1/arm-linux/include/dtk" ;;
+	powerpc-*-linux-*)INC_LN_S_DIR="/opt/eldk/ppc_6xx/usr/include/dtk" ;;
+	armv5-apple-*)INC_LN_S_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include/dtk" ;;
+	armv6-apple-*)INC_LN_S_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include/dtk" ;;
+	armv7-apple-*)INC_LN_S_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/dtk" ;;
+	armv8-apple-*)INC_LN_S_DIR="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/include/dtk" ;;
+esac
+AC_SUBST(INC_LN_S_DIR)dnl
+
+MME_COMPILE_FLAGS=""
+case "$target" in
+	alpha-dec-osf*) MME_COMPILE_FLAGS=" -DMME_SERVER -DUSE_MME_SERVER" ;;
+	*-*-linux-*) MME_COMPILE_FLAGS="" ;;
+esac
+AC_SUBST(MME_COMPILE_FLAGS)dnl
+
+dnl linux only builds mme libraries.
+DAPI_SRC_ALL="/usr/lib/libtts_\$(LANG_CODE).a \
+	/usr/lib/libttsmme_\$(LANG_CODE).a /usr/shlib/libtts_\$(LANG_CODE).so \
+	/usr/shlib/libttsmme_\$(LANG_CODE).so"
+case "$target" in
+	arm-ipaq-linux-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a \
+	\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_\$(LANG_CODE).a\
+	\$(SHLIB)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_demo_\$(LANG_CODE).a" ;;
+	*-*-linux-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a \
+	\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_\$(LANG_CODE).a\
+	\$(SHLIB)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_demo_\$(LANG_CODE).a" ;;
+	*-*-nto-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a \
+	\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_\$(LANG_CODE).a\
+	\$(SHLIB)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_demo_\$(LANG_CODE).a" ;;
+	*-*-solaris*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a \
+	\$(OUTPUT_DIR)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_\$(LANG_CODE).a\
+	\$(SHLIB)/libtts_\$(LANG_CODE).so \$(LIB_LN_S_A_DIR)/libtts_demo_\$(LANG_CODE).a" ;;
+	powerpc-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+	armv5-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+	armv6-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+	armv7-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+	armv8-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+	i386-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+	x86_64-apple-*) DAPI_SRC_ALL="\$(OUTPUT_DIR)/libtts.a \
+	\$(OUTPUT_DIR)/libtts.dylib" ;;
+esac
+AC_SUBST(DAPI_SRC_ALL)dnl
+
+dnl linux only links mme libs but they have to be called libtts_$(lang).*
+DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_TTS_OBJ) \$(CMD_OBJ) \$(LTS_OBJ) \
+	\$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \$(OSF_OBJ) \
+	\$(OSF_TTS_OBJ) \$(VTM_OBJ)"
+
+DECTALK_MME_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \$(CMD_OBJ) \$(LTS_OBJ) \
+	\$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \$(NT_OBJ) \
+	\$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)"
+dnl so build the libtts_*.? but give the linker the MME objects.
+case "$target" in
+	*-*-linux-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	*-*-nto-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	*-*-solaris*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+        powerpc-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+        \$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+        \$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	armv5-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	armv6-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	armv7-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	armv8-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	i386-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	x86_64-apple-*) DECTALK_TTS_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_NORM_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+esac
+AC_SUBST(DECTALK_TTS_OBJS)dnl
+AC_SUBST(DECTALK_MME_OBJS)dnl
+
+DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_MME_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)"
+case "$target" in
+	powerpc-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+        armv5-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+        \$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+        \$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+        armv6-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+        \$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+        \$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+        armv7-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+        \$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+        \$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+        armv8-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+        \$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+        \$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+	i386-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+	x86_64-apple-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+	*-*-solaris*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(OSF_OBJ) \$(NT_MME_OBJ) \$(VTM_OBJ)" ;;
+	*-*-linux-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+	*-*-nto-*) DECTALK_DEMO_OBJS="\$(API_ALL_OBJ) \$(API_DEMO_OBJ) \
+	\$(CMD_OBJ) \$(LTS_OBJ) \$(LTS_DEMO_OBJS) \$(PH_OBJ) \$(HL_OBJ) \$(KERNEL_OBJ) \
+	\$(NT_OBJ) \$(NT_MME_OBJ) \$(OSF_OBJ) \$(VTM_OBJ)" ;;
+esac
+AC_SUBST(DECTALK_DEMO_OBJS)dnl
+
+
+dnl always use the "-lpthread" NOT "-lpthreads" in linux
+MMELIBS=" -lmme"
+case "$target" in
+	arm-*-linux-*) MMELIBS=" -lpthread " ;;
+	*-*-linux-*) MMELIBS=" -lpthread" ;;
+	*-*-nto-*) MMELIBS=" -lasound -lc" ;;
+	powerpc-apple-*) MMELIBS=" -lpthread" ;;
+	armv5-apple-*) MMELIBS=" -lpthread" ;;
+	armv6-apple-*) MMELIBS=" -lpthread" ;;
+	armv7-apple-*) MMELIBS=" -lpthread" ;;
+	armv8-apple-*) MMELIBS=" -lpthread" ;;
+	i386-apple-*) MMELIBS=" -lpthread" ;;
+	x86_64-apple-*) MMELIBS=" -lpthread" ;;
+	*-*-solaris*) MMELIBS=" " ;;
+esac
+AC_SUBST(MMELIBS)dnl
+
+dnl	powerpc-apple-*) LIBS=" -lpthread -L../../../../shared/src/3rdParty/portaudio/lib -lportaudio -framework CoreAudio -framework AudioToolbox" ;;
+dnl	i386-apple-*) LIBS=" -lpthread -L../../../../shared/src/3rdParty/portaudio/lib -lportaudio -framework CoreAudio -framework AudioToolbox" ;;
+dnl	x86_64-apple-*) LIBS=" -lpthread -L../../../../shared/src/3rdParty/portaudio/lib -lportaudio -framework CoreAudio -framework AudioToolbox" ;;
+
+LIBS=" -llmf -lpthreads -lmach -lexc -lc -lrt -lots"
+case "$target" in 
+	arm-ipaq-linux-*) LIBS=" -lpthread -L/skiff/local/lib/gcc-lib/arm-linux/2.95.2/ -lgcc" ;;
+	powerpc-*-linux-*) LIBS=" -lpthread -L/opt/eldk/ppc_6xx/usr/pth/lib -L/opt/eldk/ppc_6xx/usr/lib" ;;
+	arm-*-linux-*) LIBS=" -L- -L/usr/local/arm/3.4.1/arm-linux/lib -lpthread " ;;
+	*-*-linux-*) LIBS=" -lpthread " ;;
+	powerpc-*-nto-*) LIBS="-L/home/mschnee/lib -lasound -lc"  ;;
+	*-*-nto-*) LIBS=" -lasound -lc"  ;;
+	powerpc-apple-*) LIBS=" -lpthread -framework CoreAudio -framework AudioToolbox -framework AudioUnit" ;;
+	armv5-apple-*) LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	armv6-apple-*) LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	armv7-apple-*) LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	armv8-apple-*) LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	i386-apple-*) LIBS=" -lpthread -framework CoreAudio -framework AudioToolbox -framework AudioUnit" ;;
+	x86_64-apple-*) LIBS=" -lpthread -framework CoreAudio -framework AudioToolbox -framework AudioUnit" ;;
+	*-*-solaris*) LIBS=" -lrt -lm " ;;
+esac
+AC_SUBST(LIBS)dnl
+
+dnl	powerpc-apple-*) LINK_PORT_AUDIO="../shared/src/3rdParty/portaudio/lib/libportaudio.a" ;;
+dnl	i386-apple-*) DT_SO_LIBS="-lpthread -L../shared/src/3rdParty/portaudio/lib -lportaudio -framework CoreAudio -framework AudioToolbox" ;;
+dnl	x86_64-apple-*) DT_SO_LIBS="-lpthread -L../shared/src/3rdParty/portaudio/lib -lportaudio -framework CoreAudio -framework AudioToolbox" ;;
+
+DT_SO_LIBS=" -llmf -lpthreads -lmach -lexc -lc -lrt -lots"
+case "$target" in 
+	arm-ipaq-linux-*) DT_SO_LIBS=" \$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a -lpthread -lc -L/skiff/local/lib/gcc-lib/arm-linux/2.95.2/ -lgcc -lfloat -lm" ;;
+	powerpc-*-linux-*) DT_SO_LIBS=" \$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a -lpthread -lc -L/opt/eldk/ppc_6xx/usr/pth/lib -L/opt/eldk/ppc_6xx/usr/lib -lm" ;;
+	arm-*-linux-*) DT_SO_LIBS=" -L- -L/usr/local/arm/3.4.1/arm-linux/lib -lpthread" ;;
+	*-*-linux-*) DT_SO_LIBS=" \$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a -lpthread -lc" ;;
+	*-*-nto-*) DT_SO_LIBS=" \$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a -lasound -lc" ;;
+	powerpc-apple-*) DT_SO_LIBS="-lpthread -framework CoreAudio -framework AudioToolbox -framework AudioUnit" ;;
+	armv5-apple-*) DT_SO_LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	armv6-apple-*) DT_SO_LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	armv7-apple-*) DT_SO_LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	armv8-apple-*) DT_SO_LIBS="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib -lpthread -framework CoreAudio -framework AudioToolbox" ;;
+	i386-apple-*) DT_SO_LIBS="-lpthread -framework CoreAudio -framework AudioToolbox -framework AudioUnit" ;;
+	x86_64-apple-*) DT_SO_LIBS="-lpthread -framework CoreAudio -framework AudioToolbox -framework AudioUnit" ;;
+	*-*-solaris*) DT_SO_LIBS=" \$(OUTPUT_DIR)/libtts_\$(LANG_CODE).a -lpthread -lc -lrt -lm" ;;
+esac
+AC_SUBST(DT_SO_LIBS)dnl
+
+SHLIB="/usr/shlib"
+case "$target" in
+	arm-ipaq-linux-*) SHLIB="/skiff/local/arm-linux/lib" ;;
+	arm-*-linux-*) SHLIB="/usr/local/arm/3.4.1/arm-linux/lib" ;;
+	powerpc-*-linux-*) SHLIB="/opt/eldk/ppc_6xx/usr/lib" ;;
+	*-*-linux-*) SHLIB="/usr/local/lib" ;;
+	powerpc-*-nto-*) SHLIB="/home/mschnee/lib" ;;
+	*-*-nto-*) SHLIB="/usr/lib" ;;
+	*-*-solaris*) SHLIB="/usr/lib" ;;
+	powerpc-apple-*) SHLIB="/usr/lib" ;;
+	armv5-apple-*) SHLIB="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib" ;;
+	armv6-apple-*) SHLIB="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib" ;;
+	armv7-apple-*) SHLIB="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib" ;;
+	armv8-apple-*) SHLIB="/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib" ;;
+	i386-apple-*) SHLIB="/usr/lib" ;;
+	x86_64-apple-*) SHLIB="/usr/lib" ;;
+esac
+AC_SUBST(SHLIB)dnl
+
+SHLIB_SUFFIX="so"
+case "$target" in
+	powerpc-apple-*) SHLIB_SUFFIX="dylib" ;;
+	armv5-apple-*) SHLIB_SUFFIX="dylib" ;;
+	armv6-apple-*) SHLIB_SUFFIX="dylib" ;;
+	armv7-apple-*) SHLIB_SUFFIX="dylib" ;;
+	armv8-apple-*) SHLIB_SUFFIX="dylib" ;;
+	i386-apple-*) SHLIB_SUFFIX="dylib" ;;
+	x86_64-apple-*) SHLIB_SUFFIX="dylib" ;;
+esac
+AC_SUBST(SHLIB_SUFFIX)dnl
+
+SO_LOCATIONS=" \$(CP) /usr/shlib/so_locations ."
+case "$target" in
+	*-*-linux-*) SO_LOCATIONS="" ;;
+	*-*-nto-*) SO_LOCATIONS="" ;;
+	*-*-solaris*) SO_LOCATIONS="" ;;
+	powerpc-apple-*) SO_LOCATIONS="" ;;
+	armv5-apple-*) SO_LOCATIONS="" ;;
+	armv6-apple-*) SO_LOCATIONS="" ;;
+	armv7-apple-*) SO_LOCATIONS="" ;;
+	armv8-apple-*) SO_LOCATIONS="" ;;
+	i386-apple-*) SO_LOCATIONS="" ;;
+	x86_64-apple-*) SO_LOCATIONS="" ;;
+esac
+AC_SUBST(SO_LOCATIONS)dnl
+
+DAPI_LD_SHARED="\$(LD) -shared -update_registry \
+	./so_locations -hidden \
+	-soname libtts_\$(LANG_CODE).so -o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS)"
+case "$target" in
+	*-*-linux-*) DAPI_LD_SHARED="\$(LD) -shared -Bsymbolic -soname \
+		libtts_\$(LANG_CODE).so -o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS)" ;;
+	*-*-nto-*) DAPI_LD_SHARED="\$(LD) -shared -Bdynamic \"-Wl,-hlibtts_\$(LANG_CODE).so\" -o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS)" ;;
+	powerpc-apple-*) DAPI_LD_SHARED="\$(CC) -arch ppc -dynamic -dynamiclib -dylib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	armv5-apple-*) DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -mios-simulator-version-min=6.1 -arch i386 -dynamic -dynamiclib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	armv6-apple-*) DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -mios-simulator-version-min=6.1 -arch x86_64 -dynamic -dynamiclib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	armv7-apple-*) DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib -mios-version-min=6.1 -arch armv7 -dynamic -dynamiclib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	armv8-apple-*) DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib -mios-version-min=6.1 -arch arm64 -dynamic -dynamiclib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	i386-apple-*) DAPI_LD_SHARED="\$(CC) -arch i386 -dynamic -dynamiclib -dylib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	x86_64-apple-*) DAPI_LD_SHARED="\$(CC) -arch x86_64 -dynamic -dynamiclib -dylib \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS) \$(LANG_LIBS)" ;;
+	*-*-solaris*) DAPI_LD_SHARED="\$(LD) -G -Bsymbolic \
+		-o \$@ \$(DECTALK_TTS_OBJS) \$(LIBS)" ;;
+esac
+AC_SUBST(DAPI_LD_SHARED)dnl
+
+LANG_DAPI_LD_SHARED="\$(LD) -shared -update_registry \
+	./so_locations -hidden \
+	-soname libtts_\$(LANG_CODE).so -o \$@ \$(\$(U_LANG_CODE)_OBJ)"
+case "$target" in
+	*-*-linux-*) LANG_DAPI_LD_SHARED="\$(LD) -shared -Bsymbolic -soname \
+		libtts_\$(LANG_CODE).so -o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	*-*-nto-*) LANG_DAPI_LD_SHARED="\$(LD) -shared -Bdynamic \"-Wl,-hlibtts_\$(LANG_CODE).so\" -o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	powerpc-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -arch ppc -dynamic -dynamiclib -dylib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	armv5-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -mios-simulator-version-min=6.1 -arch i386 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	armv6-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -mios-simulator-version-min=6.1 -arch x86_64 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	armv7-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib -mios-version-min=6.1 -arch armv7 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	armv8-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib -mios-version-min=6.1 -arch arm64 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	i386-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -arch i386 -dynamic -dynamiclib -dylib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	x86_64-apple-*) LANG_DAPI_LD_SHARED="\$(CC) -arch x86_64 -dynamic -dynamiclib -dylib \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+	*-*-solaris*) LANG_DAPI_LD_SHARED="\$(LD) -G -Bsymbolic \
+		-o \$@ \$(\$(U_LANG_CODE)_OBJ)" ;;
+esac
+AC_SUBST(LANG_DAPI_LD_SHARED)dnl
+
+LANG_DAPI_LD_STUB="\$(LD) -shared -update_registry \
+	./so_locations -hidden \
+	-soname libtts_\$(LANG_CODE)_stub.so -o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)"
+case "$target" in
+	*-*-linux-*) LANG_DAPI_LD_STUB="\$(LD) -shared -Bsymbolic -soname \
+		libtts_\$(LANG_CODE)_stub.so -o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	*-*-nto-*) LANG_DAPI_LD_STUB="\$(LD) -shared -Bdynamic \"-Wl,-hlibtts_\$(LANG_CODE)_stub.so\" -o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	powerpc-apple-*) LANG_DAPI_LD_STUB="\$(CC) -arch ppc -dynamic -dynamiclib -dylib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	armv5-apple-*) LANG_DAPI_LD_STUB="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -mios-simulator-version-min=6.1 -arch i386 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	armv6-apple-*) LANG_DAPI_LD_STUB="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -mios-simulator-version-min=6.1 -arch x86_64 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	armv7-apple-*) LANG_DAPI_LD_STUB="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib -mios-version-min=6.1 -arch armv7 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	armv8-apple-*) LANG_DAPI_LD_STUB="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/ -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib -mios-version-min=6.1 -arch arm64 -dynamic -dynamiclib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	i386-apple-*) LANG_DAPI_LD_STUB="\$(CC) -arch i386 -dynamic -dynamiclib -dylib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	x86_64-apple-*) LANG_DAPI_LD_STUB="\$(CC) -arch x86_64 -dynamic -dynamiclib -dylib \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+	*-*-solaris*) LANG_DAPI_LD_STUB="\$(LD) -G -Bsymbolic \
+		-o \$@ \$(\$(U_LANG_CODE)_STUB_OBJ)" ;;
+esac
+AC_SUBST(LANG_DAPI_LD_STUB)dnl
+
+dnl *  ML crap-a-roni goes below here.  what a nightmare!
+
+ML_ALL="/usr/lib/libtts.a /usr/lib/libttsmme.a \$(SHLIB)/libtts.so \$(SHLIB)/libttsmme.so"
+case "$target" in
+	arm-ipaq-linux-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	*-*-linux-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	*-*-nto-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	*-*-solaris*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	powerpc-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	armv5-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	armv6-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	armv7-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	armv8-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	i386-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+	x86_64-apple-*) ML_ALL="\$(LIB_LN_S_A_DIR)/libtts.a \$(SHLIB)/libtts.so" ;;
+esac
+AC_SUBST(ML_ALL)dnl
+
+dnl: see how simple this is for linux?
+ML_TTS_SO="\$(LD) -shared -Bsymbolic -soname libtts.so \
+	-o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc"
+case "$target" in
+	alpha-dec-osf4.0) ML_TTS_SO="\$(LD) \$(LD_FLAGS) -shared -update_registry ./so_locations \
+		-soname libtts.so -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a -lc -lots -lpthread" ;;
+	alpha-dec-osf3.2) ML_TTS_SO="\$(LD) \$(LD_FLAGS) -shared -update_registry ./so_locations \
+		-soname libtts.so -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a -lc -lots -lpthreads" ;;
+	powerpc-apple-*) ML_TTS_SO="\$(CC) -dynamic -dynamiclib -dylib \
+	-o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+        armv5-apple-*) ML_TTS_SO="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -mios-simulator-version-min=6.1 -dynamic -dynamiclib \
+        -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+        armv6-apple-*) ML_TTS_SO="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -mios-simulator-version-min=6.1 -dynamic -dynamiclib \
+        -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+        armv7-apple-*) ML_TTS_SO="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk -mios-version-min=6.1 -dynamic -dynamiclib \
+        -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+        armv8-apple-*) ML_TTS_SO="\$(CC) -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk -mios-version-min=6.1 -dynamic -dynamiclib \
+        -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+        ../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+	i386-apple-*) ML_TTS_SO="\$(CC) -dynamic -dynamiclib -dylib \
+	-o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+	x86_64-apple-*) ML_TTS_SO="\$(CC) -dynamic -dynamiclib -dylib \
+	-o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+	*-*-solaris*) ML_TTS_SO="\$(LD) -G -Bsymbolic \
+	-o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a  -ldl -lpthread -lc" ;;
+	*-*-nto-*) ML_TTS_SO="\$(LD) -shared -Bdynamic \"-Wl,-hlibtts.so\" \
+	-o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+	../build/\$(OS_VERSION)/\$(ML_OUT)/libtts.a -lc"
+esac
+AC_SUBST(ML_TTS_SO)dnl
+
+ML_TTS_MME_SO=""
+case "$target" in
+	alpha-dec-osf4.0) ML_TTS_MME_SO="\$(LD) \$(LD_FLAGS) -shared -update_registry ./so_locations \
+		-soname libttsmme.so -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml_mme.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/libttsmme.a -lc -lots -lpthread" ;; 
+	alpha-dec-osf3.2) ML_TTS_MME_SO="\$(LD) \$(LD_FLAGS) -shared -update_registry ./so_locations \
+		-soname libttsmme.so -o \$@ ../build/\$(OS_VERSION)/\$(ML_OUT)/link/dtalk_ml_mme.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/link/init.o \
+		../build/\$(OS_VERSION)/\$(ML_OUT)/libttsmme.a -lc -lots -lpthreads" ;;
+esac
+
+AC_SUBST(ML_TTS_MME_SO)dnl
+
+DTALK_ML="\$(CC) -c \$(CFLAGS) -o \$@ \$?"
+case "$target" in
+	alpha-dec-osf4.0) DTALK_ML="\$(CC) -c \$(CFLAGS) -pthread -DBLD_ML_DLL -o \$@ \$?" ;;
+	alpha-dec-osf3.2) DTALK_ML="\$(CC) -c \$(CFLAGS) -o \$@ \$?" ;;
+esac
+AC_SUBST(DTALK_ML)dnl
+
+DTALK_ML_MME=""
+case "$target" in
+	alpha-dec-osf4.0) DTALK_ML_MME="\$(CC) -c \$(CFLAGS) -pthread -DMME_SERVER\
+		-DBLD_ML_DLL -o \$@ \$?" ;;
+	alpha-dec-osf3.2) DTALK_ML_MME="\$(CC) -c \$(CFLAGS) -DMME_SERVER  -o \$@ \$?" ;;
+esac
+AC_SUBST(DTALK_ML_MME)dnl
+
+INIT_ML="\$(CC) -c \$(CFLAGS) \$(DEFINES) -o \$@ \$?"
+case "$target" in
+	alpha-dec-osf4.0) INIT_ML="\$(CC) -c \$(CFLAGS) \$(DEFINES) -DOSF_VERSION_V4.0 -DDEC\
+		-DBLD_ML_DLL -G3 -pthread -w1 -DMME_SERVER -DUSE_MME_SERVER -o \$@ \$?" ;;
+	alpha-dec-osf3.2) INIT_ML="\$(CC) -c \$(CFLAGS) \$(DEFINES) -DOSF_VERSION_V3.2 -DDEC\
+		-G3 -threads -w1 -DMME_SERVER -DUSE_MME_SERVER -o \$@ \$?" ;;
+esac
+AC_SUBST(INIT_ML)dnl
+
+dnl * sample targets go here:
+
+SPEAK_ALL="\$(OUTPUT_DIR)/speak \$(OUTPUT_DIR)/speak.uid"
+case "$target" in
+	alpha-dec-osf*) SPEAK_ALL="\$(OUTPUT_DIR)/speak \$(OUTPUT_DIR)/speak.uid" ;;
+	arm-*-linux-*) SPEAK_ALL="" ;;
+	powerpc-*-linux-*) SPEAK_ALL="" ;;
+	*-*-nto-*) SPEAK_ALL="" ;;
+	*-*-solaris*) SPEAK_ALL="" ;;
+	armv5-apple-*) SPEAK_ALL="" ;;
+	armv6-apple-*) SPEAK_ALL="" ;;
+	armv7-apple-*) SPEAK_ALL="" ;;
+	armv8-apple-*) SPEAK_ALL="" ;;
+	powerpc-apple-*) SPEAK_ALL="" ;;
+	i386-apple-*) SPEAK_ALL="" ;;
+	x86_64-apple-*) SPEAK_ALL="" ;;
+	*-*-linux-*) SPEAK_ALL="\$(OUTPUT_DIR)/gspeak \$(OUTPUT_DIR_2)/gspeak_\$(LANG_CODE) \
+		\$(OUTPUT_DIR_2)/gspeakdem_\$(LANG_CODE)" ;;
+esac
+AC_SUBST(SPEAK_ALL)dnl
+
+WINDICT_ALL="\$(OUTPUT_DIR)/windict \$(OUTPUT_DIR)/windict.uid"
+case "$target" in
+	alpha-dec-osf*) WINDICT_ALL="\$(OUTPUT_DIR)/windict \$(OUTPUT_DIR)/windict.uid" ;;
+	arm-*-linux-*) WINDICT_ALL="" ;;
+	powerpc-*-linux-*) WINDICT_ALL="" ;;
+	*-*-nto-*) WINDICT_ALL="" ;;
+	*-*-solaris*) WINDICT_ALL="" ;;
+	powerpc-apple-*) WINDICT_ALL="" ;;
+	armv5-apple-*) WINDICT_ALL="" ;;
+	armv6-apple-*) WINDICT_ALL="" ;;
+	armv7-apple-*) WINDICT_ALL="" ;;
+	armv8-apple-*) WINDICT_ALL="" ;;
+	i386-apple-*) WINDICT_ALL="" ;;
+	x86_64-apple-*) WINDICT_ALL="" ;;
+	*-*-linux-*) WINDICT_ALL="\$(OUTPUT_DIR)/windic" ;;
+esac
+AC_SUBST(WINDICT_ALL)dnl
+
+GTK_DEFINES=""
+case "$target" in
+	arm-*-linux-*) GTK_DEFINES="" ;;
+	powerpc-*-linux-*) GTK_DEFINES="" ;;
+	*-*-linux-*) GTK_DEFINES="\`gtk-config --cflags\`" ;;
+esac
+AC_SUBST(GTK_DEFINES)dnl
+
+GTK_LIBS=""
+case "$target" in
+	arm-*-linux-*) GTK_LIBS="" ;;
+	powerpc-*-linux-*) GTK_LIBS="" ;;
+	*-*-linux-*) GTK_LIBS="\`gtk-config --libs\`" ;;
+esac
+AC_SUBST(GTK_LIBS)dnl
+
+DTSAMPLE_ALL="\$(OUTPUT_DIR)/say \$(OUTPUT_DIR)/dtmemory \$(OUTPUT_DIR)/aclock \$(OUTPUT_DIR)/xmsay \$(OUTPUT_DIR)/xmsay.uid"
+case "$target" in
+	*-*-linux-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say \$(OUTPUT_DIR)/dtmemory \
+	\$(OUTPUT_DIR)/say_demo_\$(LANG_CODE) \
+	\$(OUTPUT_DIR)/dtmemory_demo_\$(LANG_CODE) \$(OUTPUT_DIR)/aclock" ;;
+	*-*-nto-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say \$(OUTPUT_DIR)/dtmemory \
+	\$(OUTPUT_DIR)/say_demo_\$(LANG_CODE) \
+	\$(OUTPUT_DIR)/dtmemory_demo_\$(LANG_CODE) \$(OUTPUT_DIR)/aclock" ;;
+	*-*-solaris*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say \$(OUTPUT_DIR)/dtmemory \
+	\$(OUTPUT_DIR)/say_demo_\$(LANG_CODE) \
+	\$(OUTPUT_DIR)/dtmemory_demo_\$(LANG_CODE) \$(OUTPUT_DIR)/aclock" ;;
+	powerpc-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+	armv5-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+	armv6-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+	armv7-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+	armv8-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+	i386-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+	x86_64-apple-*) DTSAMPLE_ALL="\$(OUTPUT_DIR)/say" ;;
+esac
+AC_SUBST(DTSAMPLE_ALL)dnl
+
+SAMPLE_LINKFLAGS=" -G3"
+case "$target" in
+	arm-ipaq-linux-*) SAMPLE_LINKFLAGS=" -ldl -lm" ;;
+	arm-*-linux-*) SAMPLE_LINKFLAGS=" -ldl" ;;
+	powerpc-*-linux-*) SAMPLE_LINKFLAGS=" -ldl -lm" ;;
+	*-*-solaris*) SAMPLE_LINKFLAGS=" -lm " ;;
+	*-*-linux-*) SAMPLE_LINKFLAGS=" -ldl " ;;
+	*-*-nto-*) SAMPLE_LINKFLAGS=" " ;;
+	powerpc-apple-*) SAMPLE_LINKFLAGS=" -ldl -arch ppc" ;;
+	armv5-apple-*) SAMPLE_LINKFLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -ldl -arch i386" ;;
+	armv6-apple-*) SAMPLE_LINKFLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk -ldl -arch x86_64" ;;
+	armv7-apple-*) SAMPLE_LINKFLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk -ldl -arch armv7" ;;
+	armv8-apple-*) SAMPLE_LINKFLAGS="-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk -ldl -arch arm64" ;;
+	i386-apple-*) SAMPLE_LINKFLAGS=" -ldl -arch i386" ;;
+	x86_64-apple-*) SAMPLE_LINKFLAGS=" -ldl -arch x86_64" ;;
+esac
+AC_SUBST(SAMPLE_LINKFLAGS)dnl
+
+SAMPLE_DTLIB=" -lttsmme"
+case "$target" in
+	arm-*-linux-*) SAMPLE_DTLIB=" -ltts_\$(LANG_CODE)" ;;
+	powerpc-*-linux-*) SAMPLE_DTLIB=" -ltts_\$(LANG_CODE)" ;;
+	*-*-linux-*) SAMPLE_DTLIB=" -ltts" ;;
+	*-*-nto-*) SAMPLE_DTLIB=" -ltts" ;;
+	*-*-solaris*) SAMPLE_DTLIB=" -ltts" ;;
+	powerpc-apple-*) SAMPLE_DTLIB="-L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+	armv5-apple-*) SAMPLE_DTLIB="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+	armv6-apple-*) SAMPLE_DTLIB="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/lib -L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+	armv7-apple-*) SAMPLE_DTLIB="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/lib -L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+	armv7-apple-*) SAMPLE_DTLIB="-L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS8.3.sdk/usr/lib -L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+	i386-apple-*) SAMPLE_DTLIB="-L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+	x86_64-apple-*) SAMPLE_DTLIB="-L../../../../build/\$(OS_VERSION)/dectalk -ltts" ;;
+esac
+AC_SUBST(SAMPLE_DTLIB)dnl
+
+AC_OUTPUT(Makefile Makefile.sub dapicore/Makefile dapicore/Makefile.sub dapi/Makefile dapicore/cmd/Makefile dapicore/kernel/Makefile dapicore/lts/Makefile dapicore/ph/Makefile dapicore/vtm/Makefile dapicore/hlsyn/Makefile plat/linux/src/Makefile plat/unix/src/Makefile shared/src/Makefile shared/src/osf/Makefile sdk/example/linux/windict/Makefile sdk/example/linux/dtsamples/Makefile sdk/example/linux/speak/Makefile plat/unix/apps/licunix/src/Makefile plat/unix/apps/udicunix/src/Makefile)
+dnl AC_OUTPUT always has to be last

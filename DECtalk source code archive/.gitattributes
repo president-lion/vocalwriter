@@ -1,0 +1,5 @@
+# Somebody else's source, thirty years of it, in whatever line endings and
+# encodings it was written in. Take it byte for byte: no eol normalisation,
+# no diffing it as text. This lives here rather than in the root
+# .gitattributes because that file cannot express a path with spaces in it.
+* -text

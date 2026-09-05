@@ -1,0 +1,237 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include <AudioUnit/AudioUnit.h>
+#include <AudioToolbox/AUGraph.h>
+#include <AudioToolbox/AudioSession.h>
+
+#include "ttsapi.h"
+
+AUGraph outGraph;
+int  sessionInitialized = 0;
+
+OSStatus	CoreAudioCallbackFunction(void 				*inRefCon, 
+				AudioUnitRenderActionFlags 	*ioActionFlags, 
+				const AudioTimeStamp 		*inTimeStamp, 
+				UInt32 						inBusNumber, 
+				UInt32 						inNumberFrames, 
+					  AudioBufferList 			*ioData)
+{
+}
+
+OSStatus DTAudioSessionSetActive(Boolean active)
+{
+  OSStatus err;
+#ifdef _IOSSIMULATOR_
+  return 0;
+#else
+  err = AudioSessionSetActive(active);
+  FNX_PRINTF("err = %d\n",err);
+  return err;
+#endif
+}
+
+void interruptionListenerCallback (void    *inUserData, UInt32  interruptionState ) 
+{
+  static Boolean interruptedOnPlayback = false;
+    
+    UInt32 sessionCategory = kAudioSessionCategory_MediaPlayback;  // 1
+ 
+    if (interruptionState == kAudioSessionBeginInterruption) {          // 4
+      
+            interruptedOnPlayback = true;                     // 7
+ 
+    } else if ((interruptionState == kAudioSessionEndInterruption) &&
+                                    interruptedOnPlayback) { // 8
+
+    AudioSessionSetProperty (                                      // 2
+        kAudioSessionProperty_AudioCategory,                       // 3
+        sizeof (sessionCategory),                                  // 4
+        &sessionCategory                                           // 5
+    );
+
+        interruptedOnPlayback = false;
+    }
+}
+
+MMRESULT TextToSpeechSetConfFileInfo(char *def_lang, char *langs, char *licenses, char *dict_location)
+{
+  return 0;
+}
+
+MMRESULT TextToSpeechStartup( LPTTS_HANDLE_T * pphTTS, UINT, DWORD,
+			      VOID (*DtCallbackRoutine)(LONG,
+							LONG,
+							DWORD,
+							UINT),
+			      LONG )
+{
+  AudioComponentDescription iOUnitDescription;
+  OSStatus err = noErr;
+  AUNode ioNode;
+  AudioUnit ioUnit;
+  AudioUnitElement ioUnitOutputElement = 0;
+  AURenderCallbackStruct input;
+  AudioStreamBasicDescription streamFormat;
+    Float64 preferredSampleRate = 11025.0;
+    OSStatus activationResult = 0;
+  OSStatus result = 0;
+UInt32 sessionCategory = kAudioSessionCategory_MediaPlayback;    // 1
+UInt32 maximumFramesPerSlice = 512;
+UInt32 audioRouteOverride = kAudioSessionOverrideAudioRoute_Speaker;
+
+#ifndef _IOSSIMULATOR_
+  if (!sessionInitialized)
+    {
+err = AudioSessionInitialize (
+    NULL,                            // 1
+    NULL,                            // 2
+    interruptionListenerCallback,    // 3
+    NULL                       // 4
+);
+ if (err !=0)
+   printf("session not initialized\n");
+  sessionInitialized = 1;
+}
+
+#if 0
+AudioSessionSetProperty (kAudioSessionProperty_OverrideAudioRoute,
+			 sizeof (audioRouteOverride),&audioRouteOverride);
+#endif
+
+err = AudioSessionSetProperty (
+    kAudioSessionProperty_AudioCategory,                        // 2
+    sizeof (sessionCategory),                                   // 3
+    &sessionCategory                                            // 4
+);
+ if (err !=0)
+   printf("category not set\n");
+ //#endif
+ //#if 0
+    err = AudioSessionSetProperty (
+                             kAudioSessionProperty_PreferredHardwareSampleRate,    // 1
+                             sizeof (preferredSampleRate),                                   // 3
+                             &preferredSampleRate                                            // 4
+                             );
+ if (err !=0)
+   printf("hw sample rate not set\n");
+    //#endif
+ 
+#endif    
+
+
+  NewAUGraph(&outGraph);
+ 
+    
+    // I/O unit
+  iOUnitDescription.componentType          = kAudioUnitType_Output;
+  iOUnitDescription.componentSubType       = kAudioUnitSubType_RemoteIO;
+  iOUnitDescription.componentManufacturer  = kAudioUnitManufacturer_Apple;
+  iOUnitDescription.componentFlags         = 0;
+  iOUnitDescription.componentFlagsMask     = 0;
+  
+    AUGraphAddNode(outGraph, &iOUnitDescription, &ioNode);
+
+    // now do the wiring. The graph needs to be open before you call AUGraphNodeInfo
+    AUGraphOpen(outGraph);
+    
+    AUGraphNodeInfo(outGraph, ioNode, 0, &ioUnit);
+    
+
+  input.inputProc = CoreAudioCallbackFunction;
+  input.inputProcRefCon = NULL;
+  
+  err = AudioUnitSetProperty (ioUnit, 
+			      kAudioUnitProperty_SetRenderCallback, 
+			      kAudioUnitScope_Input,
+			      0, 
+			      &input, 
+			      sizeof(input));
+  
+
+    err = AudioUnitSetProperty(ioUnit,
+							   kAudioUnitProperty_SampleRate,
+							   kAudioUnitScope_Input,
+							   0,
+							   &preferredSampleRate,
+							   sizeof(preferredSampleRate));
+    
+    
+  streamFormat.mSampleRate = 11025.0;		//	the sample rate of the audio stream
+  streamFormat.mFormatID = kAudioFormatLinearPCM;	//	the specific encoding type of audio stream
+  streamFormat.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger 
+ //   | kAudioFormatFlagsNativeEndian
+    | kLinearPCMFormatFlagIsPacked;
+ //   | kAudioFormatFlagIsNonInterleaved;
+  streamFormat.mBytesPerPacket = 568;
+  streamFormat.mFramesPerPacket = 142;
+  streamFormat.mBytesPerFrame = 4;
+  streamFormat.mChannelsPerFrame = 2;	
+  streamFormat.mBitsPerChannel = 16;	
+  
+  err = AudioUnitSetProperty (ioUnit,
+			      kAudioUnitProperty_StreamFormat,
+			      kAudioUnitScope_Input,
+			      0,
+			      &streamFormat,
+			      sizeof(AudioStreamBasicDescription));
+
+/*    err = AudioUnitSetProperty (ioUnit,
+                                kAudioUnitProperty_StreamFormat,
+                                kAudioUnitScope_Output,
+                                1,
+                                &streamFormat,
+                                sizeof(AudioStreamBasicDescription));
+*/
+    
+ 
+AudioUnitSetProperty (
+    ioUnit,
+    kAudioUnitProperty_MaximumFramesPerSlice,
+    kAudioUnitScope_Global,
+    0,                        // global scope always uses element 0
+    &maximumFramesPerSlice,
+    sizeof (maximumFramesPerSlice)
+);
+    
+return 0;
+  
+}
+
+MMRESULT TextToSpeechSpeak( LPTTS_HANDLE_T, LPTSTR, DWORD )
+{
+    if (outGraph) 
+    {
+        AUGraphIsRunning(outGraph, &isRunning);
+
+        if(!isRunning)
+	  {
+	    DTAudioSessionSetActive (true);
+
+            AUGraphStart(outGraph);
+	  }
+    }
+    return 0;
+}
+
+MMRESULT TextToSpeechReset( LPTTS_HANDLE_T, BOOL )
+{
+        AUGraphIsRunning(outGraph, &isRunning);
+
+        if(isRunning)
+	  {
+          err = AUGraphStop(outGraph);
+	  }
+//          err = AudioOutputUnitStop (pPlayAudio->hWaveOut);
+	ClosePlayDevice( pPlayAudio );
+
+}
+
+MMRESULT TextToSpeechShutdown( LPTTS_HANDLE_T )
+{
+}
+
+MMRESULT TextToSpeechGetStatusEx(LPTTS_HANDLE_T, int *, int *, unsigned int *)
+{
+}

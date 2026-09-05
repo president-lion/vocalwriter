@@ -1,0 +1,88 @@
+Stacey,
+
+The attached file contains a sample project for testing DT_TTS.
+
+After you've installed the Corona Enterprise SDK, you'll find a sample 
+project with XCode and Lua parts. Replace the Corona folder and its 
+contents with contents of this zip.
+
+dtalk_hb.dic is in this folder. It's path is referenced for the 
+SetConfFileInfo call.
+
+I'm expecting the TTS module to be called dt_TTS. (Case sensitive) Once 
+it exists, uncomment in the main.lua file the top line:
+--local dt_TTS = require( "dt_TTS" )
+
+A timer with a 50ms cycle repeatedly calls the pollTTS function which calls:
+
+     --bPlayStatus, iCurIndex, uiInstanceParam = 
+dt_TTS.DT_TextToSpeechGetStatusEx(phTTS)
+
+when module-level bPollTTS is set to true. bPollTTS is set to true by 
+the function that calls Speak. At the moment, bPollTTS is set to false 
+by the Shutdown function.
+Once you implement TextToSpeechGetStatusEx, uncomment its call. Note 
+that it returns three values. (Not sure I need uiInstanceParam.)
+
+When the app is run, five buttons appear at the bottom of the screen. 
+Each button's push runs a handler:
+onSetParams
+onInitTTS
+onSpeak
+onReset
+onDeInit
+
+The TTS calls in each of these functions has been commented out with "--":
+   --iRes = dt_TTS.DT_TextToSpeechSetConfFileInfo(sPath)
+   --phTTS = dt_TTS.DT_TextToSpeechStartup()
+   --local iRes =  dt_TTS.DT_TextToSpeechStartup( sTextString)
+   --local iRes = dt_TTS.DT_TextToSpeechReset(phTTS)
+   --local iRes = dt_TTS.DT_TextToSpeechShutdown(phTTS)
+
+As you implement, uncomment the respective functions.
+
+Each function's return (iRes) is printed to the "All Output" console at 
+the bottom-right of the XCode app window.
+
+Let me know if you have any questions.
+
+-Tom
+
+
+On 12/19/2012 1:00 PM, Tom Buchler wrote:
+> The Readme file in the Enterprise SDK is a good starting point. I 
+> believe the best architecture is for you to develop a plugin, while I 
+> continue to use the ordinary SDK. The plugin architecture lets me 
+> "require" the DECtalk library module.
+>
+> FYI: Lua is a non-typed, case-sensitive language. Functions cannot 
+> take byRef vars, however multiple return values are permitted:
+>
+> a,b = doStuff(c,d)
+>
+> Let's keep with the polling architecture rather than callbacks for 
+> index marks. I'll poll every one or two of your frames.
+>
+> Here's what I'd suggest for the API calls, subject to your approval:
+> (If you can store locally phTTS, I'm happy to eliminate it from the 
+> calls.)
+>
+> iRes = DT_TextToSpeechSetConfFileInfo(sPath)
+>
+> phTTS = DT_TextToSpeechStartup()
+>   opens TTS with the default audio device, DeviceOptions = 
+> SHARE_AUDIO_DEVICE and dwCallbackParameter = 0
+>   returns handle to TTS
+>
+> iRes =  DT_TextToSpeechStartup(phTTS, sTextString)
+>
+> bPlayStatus, iCurIndex, uiInstanceParam = 
+> DT_TextToSpeechGetStatusEx(phTTS)
+>
+> iRes = DT_TextToSpeechReset(phTTS)
+>
+> iRes = DT_TextToSpeechShutdown(phTTS)
+>
+> -Tom
+>
+>

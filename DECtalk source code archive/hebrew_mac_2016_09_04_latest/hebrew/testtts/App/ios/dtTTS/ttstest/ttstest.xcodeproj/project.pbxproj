@@ -1,0 +1,263 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1C6F3E8E173604E0002954B7 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C6F3E8D173604E0002954B7 /* Foundation.framework */; };
+		1C6F3E9F173605E5002954B7 /* testtts.c in Sources */ = {isa = PBXBuildFile; fileRef = 1C6F3E9D173605E5002954B7 /* testtts.c */; };
+		1C6F3EA11736060E002954B7 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C6F3EA01736060E002954B7 /* CoreAudio.framework */; };
+		1C6F3EA317360612002954B7 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C6F3EA217360612002954B7 /* AudioToolbox.framework */; };
+		1C6F3EA517360616002954B7 /* AudioUnit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C6F3EA417360616002954B7 /* AudioUnit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		1C6F3E88173604E0002954B7 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "include/${PRODUCT_NAME}";
+			dstSubfolderSpec = 16;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		1C6F3E8A173604E0002954B7 /* libttstest.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libttstest.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		1C6F3E8D173604E0002954B7 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		1C6F3E91173604E0002954B7 /* ttstest-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ttstest-Prefix.pch"; sourceTree = "<group>"; };
+		1C6F3E9B173605E5002954B7 /* dectalktypes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dectalktypes.h; sourceTree = "<group>"; };
+		1C6F3E9C173605E5002954B7 /* dtmmedefs.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dtmmedefs.h; sourceTree = "<group>"; };
+		1C6F3E9D173605E5002954B7 /* testtts.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = testtts.c; sourceTree = "<group>"; };
+		1C6F3E9E173605E5002954B7 /* ttsapi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ttsapi.h; sourceTree = "<group>"; };
+		1C6F3EA01736060E002954B7 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
+		1C6F3EA217360612002954B7 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		1C6F3EA417360616002954B7 /* AudioUnit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioUnit.framework; path = System/Library/Frameworks/AudioUnit.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1C6F3E87173604E0002954B7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C6F3EA517360616002954B7 /* AudioUnit.framework in Frameworks */,
+				1C6F3EA317360612002954B7 /* AudioToolbox.framework in Frameworks */,
+				1C6F3EA11736060E002954B7 /* CoreAudio.framework in Frameworks */,
+				1C6F3E8E173604E0002954B7 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1C6F3E81173604E0002954B7 = {
+			isa = PBXGroup;
+			children = (
+				1C6F3EA417360616002954B7 /* AudioUnit.framework */,
+				1C6F3EA217360612002954B7 /* AudioToolbox.framework */,
+				1C6F3EA01736060E002954B7 /* CoreAudio.framework */,
+				1C6F3E8F173604E0002954B7 /* ttstest */,
+				1C6F3E8C173604E0002954B7 /* Frameworks */,
+				1C6F3E8B173604E0002954B7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		1C6F3E8B173604E0002954B7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1C6F3E8A173604E0002954B7 /* libttstest.a */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1C6F3E8C173604E0002954B7 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1C6F3E8D173604E0002954B7 /* Foundation.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		1C6F3E8F173604E0002954B7 /* ttstest */ = {
+			isa = PBXGroup;
+			children = (
+				1C6F3E9B173605E5002954B7 /* dectalktypes.h */,
+				1C6F3E9C173605E5002954B7 /* dtmmedefs.h */,
+				1C6F3E9D173605E5002954B7 /* testtts.c */,
+				1C6F3E9E173605E5002954B7 /* ttsapi.h */,
+				1C6F3E90173604E0002954B7 /* Supporting Files */,
+			);
+			path = ttstest;
+			sourceTree = "<group>";
+		};
+		1C6F3E90173604E0002954B7 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				1C6F3E91173604E0002954B7 /* ttstest-Prefix.pch */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1C6F3E89173604E0002954B7 /* ttstest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1C6F3E98173604E0002954B7 /* Build configuration list for PBXNativeTarget "ttstest" */;
+			buildPhases = (
+				1C6F3E86173604E0002954B7 /* Sources */,
+				1C6F3E87173604E0002954B7 /* Frameworks */,
+				1C6F3E88173604E0002954B7 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ttstest;
+			productName = ttstest;
+			productReference = 1C6F3E8A173604E0002954B7 /* libttstest.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1C6F3E82173604E0002954B7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0460;
+				ORGANIZATIONNAME = "Schnee Consulting";
+			};
+			buildConfigurationList = 1C6F3E85173604E0002954B7 /* Build configuration list for PBXProject "ttstest" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 1C6F3E81173604E0002954B7;
+			productRefGroup = 1C6F3E8B173604E0002954B7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1C6F3E89173604E0002954B7 /* ttstest */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1C6F3E86173604E0002954B7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C6F3E9F173605E5002954B7 /* testtts.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1C6F3E96173604E0002954B7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 6.1;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		1C6F3E97173604E0002954B7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 6.1;
+				SDKROOT = iphoneos;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1C6F3E99173604E0002954B7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DSTROOT = /tmp/ttstest.dst;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "ttstest/ttstest-Prefix.pch";
+				GCC_PREPROCESSOR_DEFINITIONS = "DEBUG=1";
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		1C6F3E9A173604E0002954B7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DSTROOT = /tmp/ttstest.dst;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "ttstest/ttstest-Prefix.pch";
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1C6F3E85173604E0002954B7 /* Build configuration list for PBXProject "ttstest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C6F3E96173604E0002954B7 /* Debug */,
+				1C6F3E97173604E0002954B7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1C6F3E98173604E0002954B7 /* Build configuration list for PBXNativeTarget "ttstest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C6F3E99173604E0002954B7 /* Debug */,
+				1C6F3E9A173604E0002954B7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1C6F3E82173604E0002954B7 /* Project object */;
+}

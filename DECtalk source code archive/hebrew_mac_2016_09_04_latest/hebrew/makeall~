@@ -1,0 +1,10 @@
+#!/bin/bash
+
+./configure armv6-apple
+make
+./configure armv7-apple
+make
+./configure arm64-apple
+make
+./makeunivios.sh
+cp build/armuniv-14.1.0/* dt_tts/App/ios/dtTTS

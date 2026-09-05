@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VariablesViewState
+   version = "1.0">
+   <ContextStates>
+      <ContextState
+         contextName = "StartAudioPlaying:playaud_ios.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "pPlayAudio-&gt;bPaused">
+            </PersistentString>
+            <PersistentString
+               value = "pPlayAudio">
+            </PersistentString>
+            <PersistentString
+               value = "pPlayAudio-&gt;bResetPaused">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "ProcessResetMessage [inlined]:playaud_ios.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "err">
+            </PersistentString>
+            <PersistentString
+               value = "pPlayAudio">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "cm_pars_getseq:cm_pars.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "inchar">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "OP_WaitForEvent:opthread.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "pEvent">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "CoreAudioCallbackFunction:playaud_ios.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "pPlayAudio">
+            </PersistentString>
+            <PersistentString
+               value = "((float *)ioData-&gt;mBuffers[0].mData)[0]">
+            </PersistentString>
+            <PersistentString
+               value = "pPlayAudio-&gt;core_audio_float_output_buffer">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "TextToSpeechThreadMain:ttsapi.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "uiCurrentTextLength">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "ReadMessageQueue:playaud_ios.c">
+         <PersistentStrings>
+            <PersistentString
+               value = "uiNumberToRead">
+            </PersistentString>
+            <PersistentString
+               value = "pMessageQueue-&gt;uiCount">
+            </PersistentString>
+         </PersistentStrings>
+      </ContextState>
+      <ContextState
+         contextName = "read_pipeEx:pipe.c">
+      </ContextState>
+   </ContextStates>
+</VariablesViewState>
