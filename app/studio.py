@@ -1058,16 +1058,24 @@ class LyricDialog(wx.Dialog):
             note = self.note(k)
             if note is not None:
                 note.phonemes = list(group)
-        spare = len(places) - len(groups)
+        spare = places[len(groups):]
         if spare:
-            # more hyphens than the word has syllables. The notes the word
-            # did not reach keep what they had -- turning them into rests
-            # because of a typo would be a silence nobody asked for -- and
-            # they are named, so it is not discovered later.
+            # More hyphens than the word has syllables. Those notes go back to
+            # exactly what they were, lyric and all: turning them into rests
+            # because of a typo would be a silence nobody asked for, and
+            # leaving the typing on them would be worse -- a word sitting on a
+            # note that will not sing it, which a save and a reload would then
+            # read as a word of its own. They are named instead.
+            for k in spare:
+                note = self.note(k)
+                if note is not None:
+                    was_word, was_phones = self.before[self.places[k]]
+                    note.word, note.phonemes = was_word, list(was_phones)
+                self.written[k] = None
             self.tell('%s has %d syllable%s, so %d note%s left as %s'
                       % (word, len(groups), '' if len(groups) == 1 else 's',
-                         spare, '' if spare == 1 else 's',
-                         'it was' if spare == 1 else 'they were'))
+                         len(spare), '' if len(spare) == 1 else 's',
+                         'it was' if len(spare) == 1 else 'they were'))
         if self.alive:
             self.preview([self.note(k) for k in places[:len(groups)]])
 

@@ -22,6 +22,18 @@ from tools.ttvi import load as load_ttvi, phoneme_targets     # noqa: E402
 NUCLEUS_MANNERS = (0, 1, 2, 4)
 NUCLEUS_MIN_MAX = 110
 
+#: The syllabic consonants, which are a syllable with no vowel in them: the
+#: -le of "little" and the -en of "thousand", "button", "sudden".
+#:
+#: `EL` needs no help -- it is manner 4 and 160 ms, so the test above already
+#: takes it. `EN` is manner 3, which is where the ordinary consonants live,
+#: and nothing separates it from them by rule: it is 170 ms, and so are `CH`
+#: at 160 and `s` and `SH` at 115, none of which is a syllable. Letting manner
+#: 3 through on duration would make a nucleus of all of those and of silence
+#: at 305. So it is named instead. Without it "thousand" and "button" came out
+#: as one syllable each and would not divide over two notes.
+SYLLABIC = frozenset(('EL', 'EN'))
+
 _TARGETS = None
 
 
@@ -33,6 +45,8 @@ def targets():
 
 
 def is_nucleus(sym, tbl=None):
+    if sym in SYLLABIC:
+        return True
     row = (tbl or targets()).get(sym) or {}
     return (row.get('manner') in NUCLEUS_MANNERS
             and (row.get('max_ms') or 0) >= NUCLEUS_MIN_MAX)

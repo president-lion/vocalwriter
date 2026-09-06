@@ -16,6 +16,7 @@ from app import studio
 DICTIONARY = {
     'day': ['d', 'EY'],
     'daisy': ['d', 'EY', 'z', 'IY'],
+    'thousand': ['TH', 'AW', 'z', 'EN', 'd'],
     'bicycle': ['b', 'AY', 's', 'IH', 'k', 'EL'],
     'zee': ['z', 'IY'],
 }
@@ -198,7 +199,19 @@ class LyricLineTests(unittest.TestCase):
         self.assertEqual(notes[0].phonemes, ['d', 'EY'])
         self.assertEqual(notes[1].phonemes, ['z', 'IY'])
         self.assertEqual(notes[2].phonemes, [])      # not turned into a rest
+        self.assertEqual(notes[2].word, '')          # and not left wearing one
+        self.assertEqual(dlg.count(), 2)
         self.assertTrue(any('2 syllables' in m for m in dlg.studio.said))
+
+    def test_a_syllabic_n_word_divides_over_two_notes(self):
+        # "thousand" is TH AW z EN d, and EN is a syllable with no vowel in
+        # it. It used to count as one syllable and refuse to divide.
+        notes = [note(), note(64)]
+        dlg = lyrics(notes)
+        type_in(dlg, 'thou-sand ')
+        self.assertEqual([n.word for n in notes], ['thou-', 'sand'])
+        self.assertEqual(notes[0].phonemes, ['TH', 'AW'])
+        self.assertEqual(notes[1].phonemes, ['z', 'EN', 'd'])
 
     def test_a_rest_is_stepped_over(self):
         notes = [note(), note(64, ['%']), note(65)]
