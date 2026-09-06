@@ -22,6 +22,7 @@ import math
 from copy import deepcopy
 import os
 import sys
+import time
 
 import wx
 
@@ -76,6 +77,7 @@ ID_ADD_REST, ID_IMPORT, ID_EXPORT = (wx.NewIdRef() for _ in range(3))
 ID_IMPORT_INTO = wx.NewIdRef()
 ID_AUTO_PREVIEW = wx.NewIdRef()
 ID_SNAP = wx.NewIdRef()
+ID_LYRICS = wx.NewIdRef()
 ID_ENVELOPE_ARROWS = wx.NewIdRef()
 ID_EXPORT_TRACKS = wx.NewIdRef()
 ID_BAR_REST, ID_GOTO_BAR, ID_METRONOME = (wx.NewIdRef() for _ in range(3))
@@ -139,6 +141,15 @@ def note_value(beats):
 #: The phoneme that is silence. A note holding nothing else is a rest: it is
 #: not sung, it is the gap the phrases either side of it are placed around.
 REST = '%'
+
+#: the key that ends a syllable when lyrics are being typed, as the score
+#: files write them: "dai-", "sy"
+HYPHEN = ord('-')
+
+#: How long OK waits for the last words to be looked up before giving up on
+#: them. A dictionary lookup is quick; this is only here so that an engine
+#: that has stopped answering cannot hold the window shut.
+LOOKUP_WAIT = 3.0
 
 
 #: As far as a marker may be put from the written pitch, and the same number
@@ -823,6 +834,296 @@ class AddWordDialog(wx.Dialog):
 
     def result(self):
         return list(self.rows)
+
+
+class LyricDialog(wx.Dialog):
+    """Type a line of lyrics straight onto notes that are already written.
+
+    Putting words on a tune one at a time meant a dialog for each: select,
+    Shift+Enter, type, look up, confirm, select the next. A line of a dozen
+    notes was a dozen of those, and typing a line is one thing you are doing,
+    not twelve. Here it is one box and one continuous piece of typing.
+
+    Space ends a word and moves on. A hyphen ends a *syllable* and moves on,
+    which is how a word is sung across several notes -- "dai-", "sy" -- and it
+    is the same hyphen the score files are written with and that `project`
+    already knows how to put back together. Backspace on an empty box goes
+    back to the note before and puts its syllable back in the box, so a line
+    can be typed without watching where it lands and walked back when it goes
+    wrong.
+
+    Rests are stepped over. Nobody sings them, and stopping on one to be told
+    so would be in the way of the typing.
+
+    Each word is looked up as it is finished rather than at the end, so the
+    line is going onto the notes while it is being typed, and each word is
+    played once it lands -- which is the whole point of writing lyrics onto a
+    tune that already exists.
+    """
+
+    def __init__(self, parent, studio, notes, start=0):
+        wx.Dialog.__init__(self, parent, title='Write lyrics')
+        self.studio = studio
+        self.notes = notes
+        #: The notes the typing goes to: all of them but the rests. Not
+        #: `is_rest`, which is true of a note with no phonemes at all as well
+        #: as of one holding silence -- and a note with nothing on it yet is
+        #: exactly what this is for. A rest somebody wrote is `[REST]`; a note
+        #: waiting for a word is `[]`, and the difference is the whole point.
+        self.places = [i for i, n in enumerate(notes)
+                       if not (n.phonemes and n.is_rest())]
+        self.at = next((k for k, i in enumerate(self.places) if i >= start), 0)
+        #: what has been typed for each place, hyphen and all, and what the
+        #: notes held before any of it, to put back if this is cancelled
+        self.written = [None] * len(self.places)
+        self.before = [(n.word, list(n.phonemes)) for n in notes]
+        self.missing = []
+        #: lookups asked for and not yet answered, and whether this window is
+        #: still open to be spoken to
+        self.waiting = 0
+        self.alive = True
+
+        outer = wx.BoxSizer(wx.VERTICAL)
+        self.box = wx.TextCtrl(self, size=(260, -1))
+        self.box.Bind(wx.EVT_KEY_DOWN, self.on_key)
+        self.box.Bind(wx.EVT_CHAR, self.on_char)
+        labelled(self, outer, 'Syllable', self.box, 1,
+                 hint='space ends a word, a hyphen ends a syllable, '
+                      'backspace on an empty box goes back')
+        self.where = wx.StaticText(self, label='')
+        outer.Add(self.where, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 8)
+        outer.Add(self.CreateStdDialogButtonSizer(wx.OK | wx.CANCEL),
+                  0, wx.EXPAND | wx.ALL, 8)
+        for ident, handler in ((wx.ID_OK, self.on_ok),
+                               (wx.ID_CANCEL, self.on_cancel)):
+            button = self.FindWindowById(ident)
+            if button:
+                button.Bind(wx.EVT_BUTTON, handler)
+        self.SetSizerAndFit(outer)
+        self.box.SetFocus()
+        self.show_place(speak=False)
+
+    # -- where the typing is going -----------------------------------------
+
+    def note(self, k=None):
+        k = self.at if k is None else k
+        if not (0 <= k < len(self.places)):
+            return None
+        return self.notes[self.places[k]]
+
+    def place_text(self):
+        """Which note the typing is going to, said as a note rather than a row.
+
+        Its pitch and its length, not `label()`: a note nobody has written on
+        yet has no phonemes, and `label()` calls that a rest -- which is the
+        one thing it is not, and would be said of every note on the way
+        through an empty line. What is already on it is worth hearing, so it
+        is added when there is any.
+        """
+        note = self.note()
+        if note is None:
+            return 'past the last note'
+        said = ('note %d of %d, %s %s'
+                % (self.at + 1, len(self.places), pitch_name(note.pitch),
+                   note_name(note.beats) or '%g beats' % note.beats))
+        if note.word:
+            said += ', %s' % note.word
+        return said
+
+    def show_place(self, speak=True):
+        text = self.place_text()
+        self.where.SetLabel(text)
+        if speak:
+            self.studio.announce_state(text, self.box)
+
+    # -- typing -------------------------------------------------------------
+
+    def on_char(self, evt):
+        """A hyphen ends a syllable rather than being typed into the box."""
+        if evt.GetKeyCode() == HYPHEN:
+            self.commit(carry=True)
+            return
+        evt.Skip()
+
+    def on_key(self, evt):
+        code = evt.GetKeyCode()
+        if code == wx.WXK_SPACE:
+            self.commit(carry=False)
+            return
+        if code == wx.WXK_BACK and not self.box.GetValue():
+            self.step_back()
+            return
+        evt.Skip()
+
+    def commit(self, carry):
+        """Put what is typed on this note and move on to the next.
+
+        `carry` is the hyphen: the word is not finished, so there is nothing
+        to look up yet. The syllables are joined back together and looked up
+        by whichever keystroke does finish it.
+        """
+        text = self.box.GetValue().strip()
+        if not text:
+            self.studio.announce_state('type a syllable first', self.box)
+            return
+        if self.note() is None:
+            self.studio.announce_state('no more notes to write on', self.box)
+            return
+        self.written[self.at] = text + ('-' if carry else '')
+        self.note().word = self.written[self.at]
+        self.box.ChangeValue('')
+        finished = None if carry else self.run(self.at)
+        self.at += 1
+        if finished:
+            self.look_up(finished)
+        if self.note() is None:
+            self.where.SetLabel(self.place_text())
+            self.studio.announce_state(
+                'that was the last note. Press Enter to keep the line.',
+                self.box)
+            return
+        self.show_place()
+
+    def step_back(self):
+        """Backspace on an empty box: back to the syllable before this one.
+
+        The press that moves does not also delete. The one that arrives says
+        what is there, the ones after it take it apart, and when it is empty
+        again another press goes back further -- which is what makes walking a
+        line backwards feel like reading it rather than like losing a letter
+        to every change of mind.
+        """
+        if self.at <= 0:
+            self.studio.announce_state('this is the first note', self.box)
+            return
+        self.at -= 1
+        had = (self.written[self.at] or '').rstrip('-')
+        self.written[self.at] = None
+        note = self.note()
+        if note is not None:                 # back to what it sang before
+            word, phonemes = self.before[self.places[self.at]]
+            note.word, note.phonemes = word, list(phonemes)
+        self.box.ChangeValue(had)
+        self.box.SetInsertionPointEnd()
+        self.where.SetLabel(self.place_text())
+        self.studio.announce_state('%s, %s' % (had or 'empty',
+                                               self.place_text()), self.box)
+
+    # -- looking the words up ------------------------------------------------
+
+    def run(self, k):
+        """The word ending at place `k`, and the places it was spread over.
+
+        A syllable ending in a hyphen carries on into the next note, so the
+        run reaches back through however many of those were typed.
+        """
+        first = k
+        while first > 0 and (self.written[first - 1] or '').endswith('-'):
+            first -= 1
+        places = list(range(first, k + 1))
+        letters = ''.join(self.written[i] or '' for i in places)
+        clean = ''.join(c for c in letters if c.isalpha() or c == "'")
+        return (clean, places) if clean else None
+
+    def look_up(self, finished):
+        word, places = finished
+        self.waiting += 1
+        self.studio.engine.phonemes(
+            [word], lambda res: wx.CallAfter(self.wrote, word, places, res))
+
+    def tell(self, text):
+        """Say something, whether or not this window is still open.
+
+        An answer can arrive after the dialog has gone -- it is another
+        thread's -- and speaking through a control that has been destroyed is
+        not a missed announcement but a crash.
+        """
+        if self.alive:
+            self.studio.announce_state(text, self.box)
+        else:
+            self.studio.say(text)
+
+    def wrote(self, word, places, res):
+        """Put the pronunciation on the notes the word was typed over."""
+        self.waiting = max(0, self.waiting - 1)
+        phones = (res or {}).get(word, [])
+        if not phones:
+            if word not in self.missing:
+                self.missing.append(word)
+            self.tell('no pronunciation for %s. The word is written on the '
+                      'note; give it phonemes with Ctrl+E.' % word)
+            return
+        groups = phonology.regroup(phones, len(places))
+        for group, k in zip(groups, places):
+            note = self.note(k)
+            if note is not None:
+                note.phonemes = list(group)
+        spare = len(places) - len(groups)
+        if spare:
+            # more hyphens than the word has syllables. The notes the word
+            # did not reach keep what they had -- turning them into rests
+            # because of a typo would be a silence nobody asked for -- and
+            # they are named, so it is not discovered later.
+            self.tell('%s has %d syllable%s, so %d note%s left as %s'
+                      % (word, len(groups), '' if len(groups) == 1 else 's',
+                         spare, '' if spare == 1 else 's',
+                         'it was' if spare == 1 else 'they were'))
+        if self.alive:
+            self.preview([self.note(k) for k in places[:len(groups)]])
+
+    def preview(self, notes):
+        """Play the word that has just landed, on the notes it landed on."""
+        notes = [n for n in notes if n is not None and not n.is_rest()]
+        # (here `is_rest` is the right test: a note the word did not reach has
+        # no phonemes and there is nothing to play)
+        if not notes:
+            return
+        self.studio.engine.render(
+            self.studio.song(notes),
+            lambda res: wx.CallAfter(self.heard, res))
+
+    def heard(self, res):
+        if res and self.alive:
+            self.studio.play_audio(res)
+
+    # -- finishing -----------------------------------------------------------
+
+    def commit_last(self):
+        """Whatever is still in the box when OK is pressed is a word as well."""
+        if self.box.GetValue().strip() and self.note() is not None:
+            self.commit(carry=False)
+
+    def on_ok(self, _evt):
+        """Finish -- but not before the words have their pronunciations.
+
+        The last word of a line is usually still in the box when OK is
+        pressed, and every lookup is answered on another thread. Closing here
+        would let those answers arrive after the notes had been handed back:
+        after the undo step had been taken and after the list had been drawn,
+        so the line would be written down with some of its words silent. It is
+        worth the wait, and there is a limit on it so that an engine which has
+        stopped answering cannot hold the window shut.
+        """
+        self.commit_last()
+        end = time.time() + LOOKUP_WAIT
+        while self.waiting and time.time() < end:
+            wx.Yield()
+            time.sleep(0.01)
+        self.alive = False
+        self.EndModal(wx.ID_OK)
+
+    def on_cancel(self, _evt):
+        self.alive = False
+        self.EndModal(wx.ID_CANCEL)
+
+    def restore(self):
+        """Put every note back as it was, which is what Cancel means."""
+        for note, (word, phonemes) in zip(self.notes, self.before):
+            note.word, note.phonemes = word, list(phonemes)
+
+    def count(self):
+        """How many notes were written on."""
+        return sum(1 for w in self.written if w)
 
 
 class PointDialog(wx.Dialog):
@@ -1846,6 +2147,8 @@ class Frame(wx.Frame):
         note = wx.Menu()
         note.Append(ID_ADD_WORD, 'Add &word...	Ctrl+W',
                     'Look a word up and spread it over one note or several')
+        note.Append(ID_LYRICS, 'Write &lyrics...	Ctrl+L',
+                    'Type a line of words onto the notes already written')
         note.Append(ID_ADD_NOTE, 'Add &note...	Ctrl+N',
                     'Add a note and choose its phonemes')
         note.Append(ID_ADD_REST, 'Add &rest	Ctrl+R',
@@ -2022,6 +2325,7 @@ class Frame(wx.Frame):
                                (wx.ID_SAVE, self.on_save),
                                (wx.ID_SAVEAS, self.on_save_as),
                                (ID_IMPORT, self.on_import),
+                               (ID_LYRICS, self.on_lyrics),
                                (ID_IMPORT_INTO, self.on_import_into),
                                (ID_EXPORT, self.on_export),
                                (ID_EXPORT_TRACKS, self.on_export_tracks),
@@ -2184,6 +2488,7 @@ class Frame(wx.Frame):
                      'Delete on a track  remove it',
                      'Ctrl+Up or Ctrl+Down on a track  reorder the parts',
                      'Ctrl+W  add word', 'Ctrl+N  add note',
+                     'Ctrl+L  write a line of lyrics onto the notes you have: space ends a word, a hyphen ends a syllable, backspace goes back',
                      'Shift+Enter  put a word on the notes selected, keeping '
                      'their pitches and lengths',
                      'Ctrl+R  add a rest, a silent break',
@@ -2996,6 +3301,44 @@ class Frame(wx.Frame):
         self.preview_note(rows[0])
 
     @undoable('set the word on notes')
+    @undoable('write lyrics')
+    def on_lyrics(self, _evt):
+        """Ctrl+L: type a line of words onto the notes that are already there.
+
+        It starts at the note the cursor is on, so a line can be picked up
+        where it was left off, and runs to the end of the part. What is typed
+        goes onto the notes as it is typed and is put back if this is
+        cancelled, which is why the notes themselves are handed over rather
+        than copies: the preview after each word has to play the real thing.
+        """
+        if not self.notes:
+            self.announce_state('nothing to write on yet. Add a note first.',
+                                self.list)
+            return
+        if all(n.phonemes and n.is_rest() for n in self.notes):
+            self.announce_state('every note here is a rest, and a rest is not '
+                                'sung', self.list)
+            return
+        start = max(0, self.selection())
+        with LyricDialog(self, self, self.notes, start) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                dlg.restore()
+                self.sync()
+                self.announce_note('lyrics left as they were', self.list,
+                                   start)
+                return
+            written, missing = dlg.count(), list(dlg.missing)
+        self.touch()
+        self.sync(select=start)
+        said = ('%d note%s written'
+                % (written, '' if written == 1 else 's'))
+        if not written:
+            said = 'nothing written'
+        if missing:
+            said += (', and no pronunciation for %s'
+                     % ', '.join(missing[:3]))
+        self.announce_note(said, self.list, start)
+
     def on_word_over(self, _evt):
         """Shift+Enter: look a word up and sing it on the notes selected.
 
