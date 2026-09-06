@@ -84,3 +84,20 @@ says when it lands on one, and anything that happens without a keypress causing
 it is announced through `AccessibilityHandler::postAnnouncement`. That is the
 same arrangement the Studio uses: something to arrow through, and a line that
 says what just happened.
+
+A slider's value box is an editable `Label`, which is a keyboard stop of its
+own and reports itself as an edit field -- so tabbing landed on the box rather
+than the slider, and all seven read out as "edit, selected, 95": the value,
+with nothing to say what it was the value of. The boxes are read-only, which
+takes them out of the tab order without taking them off the screen. The cost is
+that a number cannot be typed straight in; the arrow keys move the slider,
+which is how it is reached from the keyboard anyway.
+
+`Test/uiadump.ps1` prints the UI Automation tree of the standalone build --
+control type, name, value and whether it is a keyboard stop -- which is what a
+screen reader on Windows actually reads. Run it after touching the window:
+
+    powershell -ExecutionPolicy Bypass -File vst/Test/uiadump.ps1
+
+Every stop should have a name. The one unnamed `Custom` element belongs to
+JUCE's standalone window and is not there when the VST3 is hosted.

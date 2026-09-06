@@ -3,11 +3,19 @@
 VocalWriterVoiceEditor::VocalWriterVoiceEditor (VocalWriterVoiceProcessor& p)
     : AudioProcessorEditor (&p), processor (p)
 {
-    setWantsKeyboardFocus (true);
+    /*  The window itself is not a place to stand: it has nothing to say, and
+        a stop with no name on it is a stop a reader cannot account for. The
+        controls inside it take the focus, which is what tabbing wants. It is
+        still named, so anything that describes the container has something to
+        describe it by. */
+    setTitle ("VocalWriter Voice");
+    setWantsKeyboardFocus (false);
+    setFocusContainerType (juce::Component::FocusContainerType::focusContainer);
 
     titleLabel.setText ("VocalWriter Voice", juce::dontSendNotification);
     titleLabel.setTitle ("VocalWriter Voice");
     titleLabel.setFont (juce::FontOptions (18.0f, juce::Font::bold));
+    titleLabel.setAccessible (false);      // the window is already called this
     addAndMakeVisible (titleLabel);
 
     statusLabel.setTitle ("Status");
@@ -18,6 +26,7 @@ VocalWriterVoiceEditor::VocalWriterVoiceEditor (VocalWriterVoiceProcessor& p)
 
     lyricsLabel.setText ("Words", juce::dontSendNotification);
     lyricsLabel.attachToComponent (&lyrics, false);
+    lyricsLabel.setAccessible (false);     // the box below it says "Words to sing"
     addAndMakeVisible (lyricsLabel);
 
     lyrics.setMultiLine (true, true);
@@ -41,6 +50,7 @@ VocalWriterVoiceEditor::VocalWriterVoiceEditor (VocalWriterVoiceProcessor& p)
 
     voiceLabel.setText ("Voice", juce::dontSendNotification);
     voiceLabel.attachToComponent (&voices, false);
+    voiceLabel.setAccessible (false);      // the combo below it says "Voice"
     addAndMakeVisible (voiceLabel);
 
     voices.setTitle ("Voice");
@@ -120,13 +130,33 @@ juce::Slider& VocalWriterVoiceEditor::addSlider (const juce::String& id,
     auto* label = sliderLabels.add (new juce::Label ({}, name));
     auto* slider = sliders.add (new juce::Slider (juce::Slider::LinearHorizontal,
                                                   juce::Slider::TextBoxRight));
-    /*  The title is what a screen reader reads on landing, and the slider
-        announces its name and value as you arrow through it. */
+
+    /*  The value box beside a slider is an editable Label, which is a keyboard
+        stop of its own and reports itself as an edit field. So tabbing landed
+        on it rather than on the slider, and every one of these read out as
+        "edit, selected, 95" -- the value with nothing to say what it was the
+        value of, because the name is on the slider behind it.
+
+        Read-only takes the box out of the tab order without taking it off the
+        screen, so the value stays visible and the stop is the slider itself,
+        which has the name and announces both. Typing a number straight in goes
+        with it; the arrow keys move the slider, which is how it is reached
+        from the keyboard anyway. */
+    slider->setTextBoxStyle (juce::Slider::TextBoxRight, true, 72, 20);
+
     slider->setTitle (name);
+    slider->setName (name);
     slider->setHelpText (help);
+    slider->setWantsKeyboardFocus (true);
+
+    /*  The label repeats what the slider already announces, so it is one more
+        thing to read past on the way down the window rather than information.
+        It stays for the eye and goes for the reader. */
     label->attachToComponent (slider, true);
+    label->setAccessible (false);
     addAndMakeVisible (label);
     addAndMakeVisible (slider);
+
     attachments.add (new juce::AudioProcessorValueTreeState::SliderAttachment (
         processor.apvts, id, *slider));
     return *slider;
