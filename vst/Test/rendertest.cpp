@@ -141,7 +141,9 @@ int main (int argc, char** argv)
     }
 
     const double bpm = 120.0;
-    auto audio = engine.render (part, 0, bpm, {});
+    const int demoVoice = argc > 3 ? juce::String (argv[3]).getIntValue() : 0;
+    std::printf ("singing it in %s\n", engine.voiceName (demoVoice).toRawUTF8());
+    auto audio = engine.render (part, demoVoice, bpm, {});
     if (audio.getNumSamples() == 0)
         return fail ("nothing was rendered: " + engine.lastError());
 
@@ -162,6 +164,53 @@ int main (int argc, char** argv)
                      std::abs (cents) < 60.0 ? "" : "   <-- wrong");
         if (! (std::abs (cents) < 60.0))
             ++wrong;
+    }
+
+    // -- does any voice in the bank clip? ----------------------------------
+    //
+    // The wavetable voices come out of the engine forty or fifty times over
+    // full scale and it clamps every sample that goes past, so before the
+    // headroom probe existed two thirds of the samples of most of this bank
+    // were flat against the ceiling. Sweep the lot and let none of them.
+    {
+        int clipping = 0, checked = 0;
+        float worst = 0.0f;
+        juce::String worstName;
+        for (int v = 0; v < engine.voiceCount(); ++v)
+        {
+            Part one;
+            Note n;
+            n.beats = 0.6; n.midi = 62; n.velocity = 100; n.phonemes = { "d", "AA" };
+            one.notes.push_back (n);
+
+            auto y = engine.render (one, v, 120.0, {});
+            if (y.getNumSamples() == 0)
+                continue;
+            ++checked;
+
+            const float* x = y.getReadPointer (0);
+            int flat = 0;
+            float peak = 0.0f;
+            for (int i = 0; i < y.getNumSamples(); ++i)
+            {
+                peak = juce::jmax (peak, std::abs (x[i]));
+                if (std::abs (x[i]) >= 0.999f)
+                    ++flat;
+            }
+            const float pct = 100.0f * flat / y.getNumSamples();
+            if (pct > worst) { worst = pct; worstName = engine.voiceName (v); }
+            if (pct > 0.5f)
+            {
+                if (clipping < 6)
+                    std::printf ("  %-22s %5.1f%% of samples clipped, peak %.2f\n",
+                                 engine.voiceName (v).toRawUTF8(), pct, peak);
+                ++clipping;
+            }
+        }
+        std::printf ("swept %d voices; %d clipping (worst %.2f%%, %s)\n",
+                     checked, clipping, worst, worstName.toRawUTF8());
+        if (clipping > 0)
+            return fail (juce::String (clipping) + " voices clip inside the engine");
     }
 
     juce::File out (argc > 2 ? juce::String (argv[2]) : juce::String ("rendertest.wav"));

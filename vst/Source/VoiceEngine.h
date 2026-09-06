@@ -18,6 +18,7 @@
 #pragma once
 
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -83,7 +84,13 @@ public:
     static juce::File guessAssetDir();
     static bool looksLikeAssetDir (const juce::File& dir);
 
-    int  voiceCount() const;
+    /*  The voices worth offering, which is not every slot the bank has.
+        `vw_ed_voice_count` says 88 and the last of them has no name and
+        wedges the engine when it is selected, so the ones with names are the
+        ones counted here -- which is the same filter ppc/engine.py's
+        `voices()` applies, for the same reason. An index anywhere in this
+        class is a place in that list, not a place in the bank. */
+    int  voiceCount() const                   { return (int) usable.size(); }
     juce::String voiceName (int index) const;
     bool voiceNeedsBank (int index) const;
 
@@ -106,6 +113,10 @@ public:
         because the singing finished. */
     bool stoppedShort() const noexcept { return ranOut; }
 
+    /*  How far a voice has to be turned down inside the engine to stop it
+        clamping. See the definition: most of the bank needs this badly. */
+    float headroom (int voiceIndex);
+
 private:
     /*  The block SetSeqAddr reads: a count, then the phoneme codes, the
         control words, a spare word each and the nominal durations, all
@@ -113,7 +124,29 @@ private:
         note, and the engine consumes one note per marker. */
     std::vector<unsigned char> packSequence (const Part& part) const;
 
+    /*  One render, at a given internal level. `render` is this with the
+        voice's headroom worked out first; the probe is this at 0.01.
+
+        Each one runs on an engine of its own. A render leaves the resonator
+        delay lines holding the state of whatever was last sung through them,
+        so a second render down the same engine begins in the middle of the
+        first -- the probe made the note after it come out an octave and a half
+        flat. ppc/render.py sidesteps this by opening a fresh engine for every
+        render, and at 25 ms to open one there is no reason not to do the same.
+    */
+    juce::AudioBuffer<float> renderAt (const Part& part, int voiceIndex, double bpm,
+                                       const VoiceControls& controls, float level);
+
+    /*  An engine set up the way a render wants one, or nullptr. The caller
+        closes it. */
+    vw_editor* openEditor() const;
+
+    /*  Which slot of the bank each offered voice really is. */
+    int inBank (int index) const;
+
     vw_editor* editor = nullptr;
+    std::vector<int> usable;
+    std::map<int, float> headrooms;
     juce::MemoryBlock rsrc, gmspeech, gmbank, lexicon;
     std::vector<std::string> phonemes;      // code -> name
     juce::String error;

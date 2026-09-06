@@ -119,6 +119,24 @@ bool VoiceEngine::open (const juce::File& assetDir)
     if (lexFile.existsAsFile() && lexFile.loadFileAsData (lexicon))
         vw_ed_lexicon (editor, (const unsigned char*) lexicon.getData(), lexicon.getSize());
 
+    /*  A slot with no name is not a voice. There is one at the end of the
+        bank, and selecting it does not come back -- so it is left out here
+        rather than guarded against everywhere it could be reached. */
+    usable.clear();
+    for (int i = 0, n = vw_ed_voice_count (editor); i < n; ++i)
+    {
+        const char* name = vw_ed_voice_name_at (editor, i);
+        if (name != nullptr && juce::String (name).trim().isNotEmpty())
+            usable.push_back (i);
+    }
+    if (usable.empty())
+    {
+        error = "the voice bank in GMSpeech.rsrc has no voices in it";
+        vw_ed_close (editor);
+        editor = nullptr;
+        return false;
+    }
+
     phonemes.clear();
     for (int code = 0; code < kPhonemeCount; ++code)
     {
@@ -138,22 +156,24 @@ bool VoiceEngine::open (const juce::File& assetDir)
     return true;
 }
 
-int VoiceEngine::voiceCount() const
+int VoiceEngine::inBank (int index) const
 {
-    return editor != nullptr ? vw_ed_voice_count (editor) : 0;
+    if (usable.empty())
+        return 0;
+    return usable[(size_t) juce::jlimit (0, (int) usable.size() - 1, index)];
 }
 
 juce::String VoiceEngine::voiceName (int index) const
 {
-    if (editor == nullptr)
+    if (editor == nullptr || usable.empty())
         return {};
-    const char* n = vw_ed_voice_name_at (editor, index);
+    const char* n = vw_ed_voice_name_at (editor, inBank (index));
     return n != nullptr ? juce::String (n) : juce::String();
 }
 
 bool VoiceEngine::voiceNeedsBank (int index) const
 {
-    return editor != nullptr && vw_ed_voice_needs_bank (editor, index) == 1;
+    return editor != nullptr && vw_ed_voice_needs_bank (editor, inBank (index)) == 1;
 }
 
 bool VoiceEngine::isPhoneme (const std::string& name) const
@@ -235,61 +255,135 @@ std::vector<unsigned char> VoiceEngine::packSequence (const Part& part) const
     return out;
 }
 
+float VoiceEngine::headroom (int voiceIndex)
+{
+    /*  The bank's voices are nothing like each other in level. The ones with
+        people's names peak below full scale with the engine wide open --
+        Robert at about 0.73 -- but every voice built on the wavetables comes
+        out forty or fifty times over it, and the engine clamps each sample
+        that goes past. Measured over the whole bank, that is 65 to 70 per
+        cent of samples clipped: distortion baked into the audio before any
+        volume of ours can reach it, which is what "massive distortion, then
+        the voice gets quieter" is -- a wall of clipping on the loud part of
+        the note, and a clean quiet tail once it decays under the ceiling.
+
+        So each voice is sung once, quietly, to find out how loud it really
+        is, and told to stay inside afterwards. This is what ppc/engine.py's
+        `_headroom` does, with its constants: a d-AA on D4, probed at 1/100th,
+        and 0.7 of full scale to come back to.
+
+        A voice that already fits is left exactly alone. The test is whether
+        it clips, not whether it is loud, so the voices that were right before
+        render identically. */
+    if (auto it = headrooms.find (voiceIndex); it != headrooms.end())
+        return it->second;
+
+    Part probe;
+    Note n;
+    n.startBeats = 0.0;
+    n.beats = 0.6;
+    n.midi = 62;
+    n.velocity = 100;
+    n.phonemes = { "d", "AA" };
+    probe.notes.push_back (n);
+
+    constexpr float kProbeLevel = 0.01f;
+    constexpr float kHeadroom = 0.7f;
+
+    auto y = renderAt (probe, voiceIndex, 120.0, {}, kProbeLevel);
+    float peak = 0.0f;
+    for (int ch = 0; ch < y.getNumChannels(); ++ch)
+        peak = juce::jmax (peak, y.getMagnitude (ch, 0, y.getNumSamples()));
+    peak /= kProbeLevel;
+
+    const float gain = peak <= 1.0f ? 1.0f : kHeadroom / juce::jmax (peak, 1.0e-6f);
+    headrooms[voiceIndex] = gain;
+    return gain;
+}
+
 juce::AudioBuffer<float> VoiceEngine::render (const Part& part, int voiceIndex,
                                               double bpm, const VoiceControls& controls)
+{
+    return renderAt (part, voiceIndex, bpm, controls, headroom (voiceIndex));
+}
+
+vw_editor* VoiceEngine::openEditor() const
+{
+    auto* e = vw_ed_open ((const unsigned char*) rsrc.getData(), rsrc.getSize(),
+                          (const unsigned char*) gmspeech.getData(), gmspeech.getSize());
+    if (e != nullptr && gmbank.getSize() > 0)
+        vw_ed_bank (e, (const unsigned char*) gmbank.getData(), gmbank.getSize());
+    return e;
+}
+
+juce::AudioBuffer<float> VoiceEngine::renderAt (const Part& part, int voiceIndex,
+                                                double bpm, const VoiceControls& controls,
+                                                float level)
 {
     ranOut = false;
     juce::AudioBuffer<float> empty (2, 0);
     if (editor == nullptr || part.isEmpty())
         return empty;
 
+    vw_editor* eng = openEditor();
+    if (eng == nullptr)
+    {
+        error = "the engine would not open for this render";
+        return empty;
+    }
+    const juce::ScopeGuard closeIt { [&] { vw_ed_close (eng); } };
+
     /*  MAX_FRAMES as ppc/render.py has it: a phrase longer than this is
         sixteen minutes of singing without a break in it. */
     constexpr int kMaxFrames = 200000;
 
-    vw_ed_tempo_scale (editor, 1.0f / 240.0f);
-    vw_ed_tempo (editor, juce::jlimit (10, 250, (int) std::lround (bpm)));
+    vw_ed_tempo_scale (eng, 1.0f / 240.0f);
+    vw_ed_tempo (eng, juce::jlimit (10, 250, (int) std::lround (bpm)));
 
-    if (vw_ed_voice (editor, voiceIndex) != 0)
-        vw_ed_voice (editor, 0);
+    if (vw_ed_voice (eng, inBank (voiceIndex)) != 0)
+        vw_ed_voice (eng, inBank (0));
 
     auto blob = packSequence (part);
-    if (vw_ed_sequence (editor, blob.data(), blob.size()) != 0)
+    if (vw_ed_sequence (eng, blob.data(), blob.size()) != 0)
     {
         error = "the engine would not take the phonemes for this part";
         return empty;
     }
-    vw_ed_start (editor);
+    vw_ed_start (eng);
 
     /*  The glide table is wired after the defaults on purpose: the engine's
         own default portamento is read out of it, so wiring it earlier puts a
         glide on every note. ppc/render.py explains it at length. */
-    vw_ed_defaults (editor, 1);
-    vw_ed_volume (editor, 127);
+    vw_ed_defaults (eng, 1);
+    vw_ed_volume (eng, 127);
+    /*  After the volume, as ppc/render.py has it, and only when it is not the
+        engine's own 1.0 -- a voice that already fits is not touched. */
+    if (std::abs (level - 1.0f) > 1.0e-6f)
+        vw_ed_level (eng, level);
 
     /*  Only the controls that have been moved off their default, so a part
         that sets none of them sounds exactly as the engine left it -- the
         values do not round-trip through a 0-127 knob perfectly. */
     const VoiceControls d {};
-    if (controls.colour     != d.colour)     vw_ed_control (editor, "Speech_Color", controls.colour);
-    if (controls.vibrato    != d.vibrato)    vw_ed_control (editor, "Speech_VibDepth", controls.vibrato);
-    if (controls.vibratoRate!= d.vibratoRate)vw_ed_control (editor, "Speech_VibFreq", controls.vibratoRate);
-    if (controls.breath     != d.breath)     vw_ed_control (editor, "Speech_Breath", controls.breath);
-    if (controls.portamento != d.portamento) vw_ed_control (editor, "Speech_Portamento", controls.portamento);
-    if (controls.detune     != d.detune)     vw_ed_control (editor, "Speech_Detune", controls.detune);
+    if (controls.colour     != d.colour)     vw_ed_control (eng, "Speech_Color", controls.colour);
+    if (controls.vibrato    != d.vibrato)    vw_ed_control (eng, "Speech_VibDepth", controls.vibrato);
+    if (controls.vibratoRate!= d.vibratoRate)vw_ed_control (eng, "Speech_VibFreq", controls.vibratoRate);
+    if (controls.breath     != d.breath)     vw_ed_control (eng, "Speech_Breath", controls.breath);
+    if (controls.portamento != d.portamento) vw_ed_control (eng, "Speech_Portamento", controls.portamento);
+    if (controls.detune     != d.detune)     vw_ed_control (eng, "Speech_Detune", controls.detune);
 
     size_t next = 0;
     auto feed = [&]
     {
         auto& n = part.notes[next++];
-        vw_ed_note (editor, n.midi, 0, juce::jlimit (1, 127, n.velocity), n.beats);
+        vw_ed_note (eng, n.midi, 0, juce::jlimit (1, 127, n.velocity), n.beats);
     };
     feed();
 
     int frames = 0;
     while (frames < kMaxFrames)
     {
-        int ran = vw_ed_frames (editor, kMaxFrames - frames);
+        int ran = vw_ed_frames (eng, kMaxFrames - frames);
         frames += ran;
         if (ran == 0)
         {
@@ -298,9 +392,9 @@ juce::AudioBuffer<float> VoiceEngine::render (const Part& part, int voiceIndex,
             ranOut = true;
             break;
         }
-        if (vw_ed_state (editor) == 3)
+        if (vw_ed_state (eng) == 3)
             break;
-        if (vw_ed_wants_note (editor))
+        if (vw_ed_wants_note (eng))
         {
             if (next >= part.notes.size())
                 break;
@@ -310,8 +404,8 @@ juce::AudioBuffer<float> VoiceEngine::render (const Part& part, int voiceIndex,
     if (frames >= kMaxFrames)
         ranOut = true;
 
-    const int32_t halfwords = vw_ed_wave_index (editor);
-    const int16_t* raw = vw_ed_wave (editor);
+    const int32_t halfwords = vw_ed_wave_index (eng);
+    const int16_t* raw = vw_ed_wave (eng);
     if (raw == nullptr || halfwords <= 0)
         return empty;
 
