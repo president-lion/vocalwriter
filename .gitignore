@@ -144,3 +144,9 @@ DECtalk source code archive/**/*.iso
 .claude.json.backup
 CLAUDE.md
 CLAUDE.local.md
+
+# The plugin's build, and JUCE, which is 111 MB of someone else's repository
+# and is cloned by vst/build_plugin.ps1 on the first build.
+vst/build/
+vst/libs/
+vst/build_out.txt
