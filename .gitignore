@@ -131,3 +131,16 @@ DECtalk source code archive/**/*.avi
 DECtalk source code archive/**/*.bin
 DECtalk source code archive/**/*.img
 DECtalk source code archive/**/*.iso
+
+# Claude Code. Session state, settings, worktrees and per-user memory live
+# here, and they are one person's notes about their own work rather than
+# anything about the program. Two people's sessions writing the same files
+# would clobber each other's, so none of it is shared.
+**/*claude*
+**/*Claude*
+**/*CLAUDE*
+.claude/
+.claude.json
+.claude.json.backup
+CLAUDE.md
+CLAUDE.local.md
