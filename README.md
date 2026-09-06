@@ -138,7 +138,8 @@ loud as Robert; the track's volume is the place to fix that.
 | Space | play from the cursor, or stop |
 | Ctrl+P / Ctrl+H / Ctrl+M / Ctrl+. | play from the start / hear one note / metronome / stop |
 | Ctrl+O / Ctrl+S | open and save a project |
-| Ctrl+I | import a MIDI file |
+| Ctrl+I | import a MIDI file in place of this song |
+| Ctrl+Shift+I | import one into this song as a new track |
 | Ctrl+Shift+S / Ctrl+Shift+T | export one WAV / one WAV per track |
 | F1 | list the keys in Messages |
 

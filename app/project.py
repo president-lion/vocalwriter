@@ -363,11 +363,64 @@ def from_clipboard(text):
 
 # -- MIDI ------------------------------------------------------------------
 
-def midi_tracks(path):
-    """The tracks worth importing, as [(name, note count)]."""
-    midi = MidiFile.from_file(path)
-    return [(t.name or 'untitled', len(t.notes))
-            for t in midi.tracks if t.notes]
+def midi_parts(path):
+    """Every part in a MIDI file, in the order they are written.
+
+    A part is one channel of one track, which is what a single player plays.
+    Splitting on the channel as well as the track matters because a format 0
+    file is *one* track carrying up to sixteen parts at once -- read a track at
+    a time it comes out as every instrument in the song piled into one line.
+
+    Each part is a dict: `name` is what to call the editor track, `count` how
+    many notes it has, `low` and `high` its lowest and highest pitch, and
+    `track`/`channel` where it came from. Parts are chosen by their position in
+    this list and never by their name: a Reaper export names every track after
+    the plugin on it, so four different parts arrive called "ReaSynth", and
+    picking by name gave whichever came first -- four copies of one part.
+    """
+    return [{k: v for k, v in part.items() if k != 'track_obj'}
+            for part in _parts(MidiFile.from_file(path))]
+
+
+def _parts(midi):
+    """`midi_parts` with each part's Track kept, for the reader's own use."""
+    out = []
+    for index, track in enumerate(midi.tracks):
+        for chan in track.channels():
+            sub = track.on_channel(chan)
+            pitches = [n.pitch for n in sub.notes]
+            out.append({'name': track.name.strip() or 'untitled',
+                        'count': len(sub.notes),
+                        'low': min(pitches), 'high': max(pitches),
+                        'track': index, 'channel': chan,
+                        'track_obj': sub})
+    _name_apart(out)
+    return out
+
+
+def _name_apart(parts):
+    """Give parts that share a name something to tell them apart by.
+
+    Two parts called the same thing are two rows of the same words in the list
+    to pick from, and two editor tracks with one name between them. What
+    distinguishes them is the order they come in, so that is what gets added --
+    and only where it is needed, so a file whose tracks are properly named
+    keeps its names.
+    """
+    seen = {}
+    for part in parts:
+        seen[part['name']] = seen.get(part['name'], 0) + 1
+    used = {p['name'] for p in parts if seen[p['name']] == 1}
+    n = {}
+    for part in parts:
+        if seen[part['name']] == 1:
+            continue
+        n[part['name']] = n.get(part['name'], 0) + 1
+        name = '%s %d' % (part['name'], n[part['name']])
+        while name in used:
+            name += "'"
+        used.add(name)
+        part['name'] = name
 
 
 def _tempo(midi):
@@ -390,12 +443,55 @@ def quantise(beats, grid):
     return max(grid, round(beats / grid) * grid)
 
 
-def from_midi(path, track_name=None, rest_beats=0.25, grid=0.25):
-    """Turn a MIDI track into editor notes.
+def _on_grid(beats, grid):
+    """A *moment* rounded to the grid -- which, unlike a length, may be zero."""
+    if not grid:
+        return beats
+    return round(round(beats / grid) * grid, 6)
 
-    Returns (bpm, rows, pending), where a row is
-    (phonemes, pitch, beats, word) and `pending` is [(word, [row index, ...])]
-    -- words whose pronunciation the caller still has to look up.
+
+def one_voice(notes):
+    """One singable line out of a part that may be playing several at once.
+
+    A MIDI track holds chords, and a voice does not. Laid out in the order they
+    were read, the three notes of a chord became three notes in a row, so a bar
+    of accompaniment came out as three bars of nonsense and everything after it
+    was two bars late. The top note is the one that carries a tune, so where
+    notes sound together the top one is kept; a note still sounding when the
+    next one begins is cut short there rather than running past it.
+    """
+    kept = []
+    for n in sorted(notes, key=lambda x: (x.tick, -x.pitch, -x.duration)):
+        if kept and n.tick == kept[-1].tick:
+            continue                     # a lower note of the same chord
+        kept.append(n)
+    for a, b in zip(kept, kept[1:]):
+        a.duration = min(a.duration, b.tick - a.tick)
+    return kept
+
+
+def from_midi(path, part=0, rest_beats=0.25, grid=0.25):
+    """Turn one part of a MIDI file into editor notes.
+
+    `part` is a position in `midi_parts`. Returns (bpm, rows, pending, sig),
+    where a row is (phonemes, pitch, beats, word, bend) and `pending` is
+    [(word, [row index, ...])] -- words whose pronunciation the caller still
+    has to look up.
+    """
+    midi = MidiFile.from_file(path)
+    return _from_part(midi, _pick(_parts(midi), part), rest_beats, grid)
+
+
+def _pick(parts, part):
+    if not parts:
+        raise ValueError('this file has no notes in it')
+    if not 0 <= part < len(parts):
+        raise ValueError('this file has no part %d in it' % (part + 1))
+    return parts[part]
+
+
+def _from_part(midi, part, rest_beats, grid):
+    """Rows for one part of an already-read file.
 
     VocalWriter's own exports carry each note's phonemes as well as its lyric,
     so one of those comes back complete and ready to sing. Any other MIDI has
@@ -404,32 +500,38 @@ def from_midi(path, track_name=None, rest_beats=0.25, grid=0.25):
     before being looked up and the pronunciation is divided over the notes they
     came from.
 
+    Where a note falls is worked out from its own place in the file rather than
+    by adding up the lengths of everything before it, so the rounding on one
+    note cannot walk the rest of the part out of time. Silence before the first
+    note is kept as a rest: a part that comes in at bar three comes in at bar
+    three, which is also the only thing that keeps several parts of one file
+    lined up with each other -- imported without it, a melody starting on the
+    third beat and a bass starting on the first both began at the same moment.
+
     Gaps between notes become rests, so the phrasing survives the trip.
-    `rest_beats` is the shortest gap worth keeping; below it the note simply
-    runs on to the next, which is how a legato line is written.
+    `rest_beats` is the shortest gap worth keeping; below it the note before it
+    runs on to the next, which is how a legato line is written -- it runs on
+    rather than the gap being thrown away, which would pull the rest early.
 
     A note that carries neither phonemes nor a word is given `DEFAULT_PHONEME`
     to sing, so an ordinary MIDI file arrives as a song that can be played.
     """
-    midi = MidiFile.from_file(path)
-    tracks = [t for t in midi.tracks if t.notes]
-    if not tracks:
-        raise ValueError('this file has no notes in it')
-    if track_name:
-        match = [t for t in tracks if (t.name or 'untitled') == track_name]
-        if not match:
-            raise ValueError('no track named %r' % track_name)
-        tracks = match
-    track = tracks[0]
-
+    track = part['track_obj']
     div = float(midi.division or 480)
     curve = bend_curve(track)
-    rows, cursor = [], None
-    for n in sorted(track.notes, key=lambda x: x.tick):
-        gap = 0.0 if cursor is None else (n.tick - cursor) / div
+    least = grid or 1.0 / div
+    rows, cursor = [], 0.0
+    for n in one_voice(track.notes):
+        span = max(n.duration, 1)
+        start = _on_grid(n.tick / div, grid)
+        end = max(start + least, _on_grid((n.tick + span) / div, grid))
+        gap = round(start - cursor, 6)
         if gap >= rest_beats:
-            rows.append([['%'], n.pitch, quantise(gap, grid), '', []])
-        beats = quantise(max(n.duration, 1) / div, grid)
+            rows.append([['%'], n.pitch, gap, '', []])
+            cursor = start
+        elif gap > 0 and rows:
+            rows[-1][2] = round(rows[-1][2] + gap, 6)
+            cursor = start
         word = (n.text or '').strip()
         if n.phonemes:
             ph = [PALETTE.get(x, x) for x in split_phonemes(n.phonemes)]
@@ -437,28 +539,32 @@ def from_midi(path, track_name=None, rest_beats=0.25, grid=0.25):
             ph = []                      # the lookup will fill it in
         else:
             ph = [DEFAULT_PHONEME]
-        span = max(n.duration, 1)
+        beats = max(least, round(end - cursor, 6))
         rows.append([ph, n.pitch, beats, word,
                      _bend_over(curve, n.tick, n.tick + span)])
-        cursor = n.tick + span
+        cursor = round(cursor + beats, 6)
 
     pending = _pending_words(rows)
     return (_tempo(midi), [tuple(r) for r in rows], pending, _sig(midi))
 
 
-def from_midi_tracks(path, names, rest_beats=0.25, grid=0.25):
+def from_midi_parts(path, parts, rest_beats=0.25, grid=0.25):
     """Several parts of a MIDI file at once, one editor track for each.
 
-    Returns (bpm, time signature, [(name, rows, pending)]). The tempo and the
-    signature belong to the file rather than to any one part, so the first
-    part's are the song's.
+    `parts` are positions in `midi_parts`. Returns
+    (bpm, time signature, [(name, rows, pending)]). The tempo and the signature
+    belong to the file rather than to any one part, so the first part's are the
+    song's.
     """
+    midi = MidiFile.from_file(path)
+    every = _parts(midi)
     out, bpm, sig = [], 120.0, DEFAULT_SIG
-    for k, name in enumerate(names):
-        bpm, rows, pending, part_sig = from_midi(path, name, rest_beats, grid)
+    for k, which in enumerate(parts):
+        part = _pick(every, which)
+        bpm, rows, pending, part_sig = _from_part(midi, part, rest_beats, grid)
         if not k:
             sig = part_sig
-        out.append((name, rows, pending))
+        out.append((part['name'], rows, pending))
     return bpm, sig, out
 
 

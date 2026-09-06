@@ -73,6 +73,7 @@ ID_ADD_WORD, ID_ADD_NOTE, ID_EDIT, ID_REMOVE = (wx.NewIdRef() for _ in range(4))
 ID_UP, ID_DOWN, ID_LONGER, ID_SHORTER = (wx.NewIdRef() for _ in range(4))
 ID_PLAY, ID_HEAR, ID_STOP, ID_KEYS = (wx.NewIdRef() for _ in range(4))
 ID_ADD_REST, ID_IMPORT, ID_EXPORT = (wx.NewIdRef() for _ in range(3))
+ID_IMPORT_INTO = wx.NewIdRef()
 ID_AUTO_PREVIEW = wx.NewIdRef()
 ID_SNAP = wx.NewIdRef()
 ID_ENVELOPE_ARROWS = wx.NewIdRef()
@@ -1931,7 +1932,10 @@ class Frame(wx.Frame):
                  'Save the song under a new name')
         f.AppendSeparator()
         f.Append(ID_IMPORT, '&Import MIDI...	Ctrl+I',
-                 'Take the notes from a MIDI file')
+                 'Take the notes from a MIDI file, in place of this song')
+        f.Append(ID_IMPORT_INTO, 'Import MIDI as a &new track...	Ctrl+Shift+I',
+                 'Add the notes from a MIDI file to this song, '
+                 'keeping what is already in it')
         f.Append(ID_EXPORT, '&Export WAV...	Ctrl+Shift+S',
                  'Write the whole song to one file')
         f.Append(ID_EXPORT_TRACKS, 'Export &tracks...	Ctrl+Shift+T',
@@ -2018,6 +2022,7 @@ class Frame(wx.Frame):
                                (wx.ID_SAVE, self.on_save),
                                (wx.ID_SAVEAS, self.on_save_as),
                                (ID_IMPORT, self.on_import),
+                               (ID_IMPORT_INTO, self.on_import_into),
                                (ID_EXPORT, self.on_export),
                                (ID_EXPORT_TRACKS, self.on_export_tracks),
                                (wx.ID_PREFERENCES, self.on_song_settings),
@@ -2219,7 +2224,8 @@ class Frame(wx.Frame):
                      'Ctrl+M  metronome on or off, for playing only',
                      'Ctrl+. stop',
                      'Ctrl+O open a project, Ctrl+S save it',
-                     'Ctrl+I  import a MIDI file',
+                     'Ctrl+I  import a MIDI file in place of this song',
+                     'Ctrl+Shift+I  import one into this song as a new track',
                      'Ctrl+Shift+S  export the whole song as one WAV',
                      'Ctrl+Shift+T  export every track to its own WAV',
                      'Enter on a note edits it'):
@@ -3721,69 +3727,145 @@ class Frame(wx.Frame):
     # -- MIDI --------------------------------------------------------------
 
     def on_import(self, _evt):
+        """A MIDI file in place of this song."""
         if not self.may_discard('Import over it'):
             return
-        with wx.FileDialog(self, 'Import MIDI',
-                           wildcard=project.MIDI_WILDCARD,
-                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
-            if dlg.ShowModal() != wx.ID_OK:
-                return
-            path = dlg.GetPath()
-        try:
-            parts = project.midi_tracks(path)
-        except (OSError, ValueError) as exc:
-            self.say('cannot read %s: %s' % (os.path.basename(path), exc))
+        picked = self._pick_midi('Import MIDI')
+        if not picked:
             return
-        if not parts:
-            self.say('%s has no notes in it' % os.path.basename(path))
-            return
-        names = [n for n, _count in parts]
-        if len(parts) > 1:
-            # Every part at once is the first choice, and the default: a file
-            # with several parts in it is usually several parts of one song.
-            labels = (['Every part, one track each']
-                      + ['%s, %d notes' % (n, c) for n, c in parts])
-            pick = wx.SingleChoiceDialog(self, 'What should be imported?',
-                                         'Import MIDI', labels)
-            ok = pick.ShowModal() == wx.ID_OK
-            i = pick.GetSelection()
-            pick.Destroy()
-            if not ok:
-                return
-            if i > 0:
-                names = [names[i - 1]]
-        try:
-            bpm, sig, got = project.from_midi_tracks(path, names)
-        except (OSError, ValueError) as exc:
-            self.say('cannot import: %s' % exc)
-            return
+        path, bpm, sig, got = picked
         program = self.track.program
         self.take(bpm, [{'name': name, 'program': program, 'volume': 100,
                          'pan': 0, 'mute': False, 'solo': False, 'rows': rows}
                         for name, rows, _pending in got], sig=sig)
-        self.say('imported %s: %d track%s, %d notes, %g bpm, %s'
-                 % (os.path.basename(path), len(got),
-                    '' if len(got) == 1 else 's',
-                    sum(len(r) for _n, r, _p in got), round(bpm),
-                    project.format_sig(sig)))
+        self._imported(path, got, base=0, tempo=(bpm, sig))
+
+    def on_import_into(self, _evt):
+        """A MIDI file added to this song, as new tracks after this one.
+
+        Writing a part at a time in a sequencer and bringing each one over as
+        it is finished is how a song with several voices in it actually gets
+        made -- and until now importing was the one door in, and it threw the
+        song away to come through. There was no way to put a second part next
+        to the first except to type it in by hand.
+
+        What comes in is the notes. The song keeps its own tempo and its own
+        time signature, since the parts already here were written to them and
+        changing them under a part is not importing, it is retiming everything.
+        """
+        picked = self._pick_midi('Import MIDI as a new track')
+        if not picked:
+            return
+        path, bpm, sig, got = picked
+        base = self.current + 1
+        self._add_imported(got, base)
+        self._imported(path, got, base=base, tempo=None)
+        self.tracks_list.SetFocus()
+        if round(bpm) != self.bpm:
+            self.say('it was written at %g bpm and this song is %d, so it will '
+                     'sing faster or slower than it was played. Ctrl+comma '
+                     'sets the tempo.' % (round(bpm), self.bpm))
+
+    @undoable('import MIDI')
+    def _add_imported(self, got, base):
+        program = self.track.program
+        for k, (name, rows, _pending) in enumerate(got):
+            self.tracks.insert(base + k, project.Track(
+                name=self.free_track_name(name), program=program,
+                notes=[Note(ph, pitch, beats, word, bend)
+                       for ph, pitch, beats, word, bend in rows]))
+        self.touch()
+        self.sync_tracks(select=base)
+        self.sync(select=0)
+
+    def free_track_name(self, name):
+        """`name`, or the nearest thing to it no track has already."""
+        taken = {t.name for t in self.tracks}
+        if name not in taken:
+            return name
+        n = 2
+        while '%s %d' % (name, n) in taken:
+            n += 1
+        return '%s %d' % (name, n)
+
+    def _pick_midi(self, title):
+        """Ask for a file and which of its parts. (path, bpm, sig, got) or None.
+
+        A part is one channel of one track, and it is picked by where it is in
+        the list rather than by its name, which is not necessarily its own --
+        Reaper names every track after the plugin on it, so a file of four
+        parts offers "ReaSynth" four times over. What tells them apart is on
+        the row: how many notes each has and the range it covers.
+        """
+        with wx.FileDialog(self, title, wildcard=project.MIDI_WILDCARD,
+                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dlg:
+            if dlg.ShowModal() != wx.ID_OK:
+                return None
+            path = dlg.GetPath()
+        try:
+            parts = project.midi_parts(path)
+        except (OSError, ValueError) as exc:
+            self.say('cannot read %s: %s' % (os.path.basename(path), exc))
+            return None
+        if not parts:
+            self.say('%s has no notes in it' % os.path.basename(path))
+            return None
+        which = list(range(len(parts)))
+        if len(parts) > 1:
+            # Every part at once is the first choice, and the default: a file
+            # with several parts in it is usually several parts of one song.
+            labels = (['Every part, one track each']
+                      + ['%s, %d notes, %s to %s'
+                         % (p['name'], p['count'], pitch_name(p['low']),
+                            pitch_name(p['high'])) for p in parts])
+            pick = wx.SingleChoiceDialog(self, 'What should be imported?',
+                                         title, labels)
+            ok = pick.ShowModal() == wx.ID_OK
+            i = pick.GetSelection()
+            pick.Destroy()
+            if not ok:
+                return None
+            if i > 0:
+                which = [i - 1]
+        try:
+            bpm, sig, got = project.from_midi_parts(path, which)
+        except (OSError, ValueError) as exc:
+            self.say('cannot import: %s' % exc)
+            return None
+        return path, bpm, sig, got
+
+    def _imported(self, path, got, base, tempo):
+        """Say what arrived, and look up any words it brought with it."""
+        told = ('imported %s: %d part%s, %d notes'
+                % (os.path.basename(path), len(got),
+                   '' if len(got) == 1 else 's',
+                   sum(len(r) for _n, r, _p in got)))
+        if tempo:
+            bpm, sig = tempo
+            told += ', %g bpm, %s' % (round(bpm), project.format_sig(sig))
+        else:
+            told += ' after %s' % self.tracks[base - 1].name
+        self.say(told)
         if not any(pend for _n, _rows, pend in got) and not any(
                 any(row[3] for row in rows) for _n, rows, _p in got):
             self.say('it carried no words, so every note sings %s. '
                      'Ctrl+W puts a word on one.' % project.DEFAULT_PHONEME)
+        program = self.track.program
         if len(got) > 1:
             self.say('every part is singing in %s. Enter on a track gives it '
                      'its own voice, volume and pan.'
                      % self.voice_name(self.program_map.get(program, 0)))
         # which track each word landed on, since a lookup comes back for the
         # whole file at once
-        pending = [(k, word, indices)
+        pending = [(base + k, word, indices)
                    for k, (_n, _rows, pend) in enumerate(got)
                    for word, indices in pend]
         if pending:
             words = sorted({w for _k, w, _ix in pending})
             self.say('looking up %d word%s' % (len(words),
                                                '' if len(words) == 1 else 's'))
-            rows_by_track = [rows for _n, rows, _p in got]
+            rows_by_track = {base + k: rows
+                             for k, (_n, rows, _p) in enumerate(got)}
             self.engine.phonemes(
                 words,
                 lambda res: wx.CallAfter(self._imported_words, rows_by_track,
@@ -3793,11 +3875,11 @@ class Frame(wx.Frame):
     def _imported_words(self, rows_by_track, pending, res):
         """Fill in the pronunciations for a MIDI that carried only lyrics."""
         found = res or {}
-        rows = [list(r) for r in rows_by_track]
+        rows = {ti: list(r) for ti, r in rows_by_track.items()}
         got = 0
         for ti, word, indices in pending:
             phones = found.get(word) or []
-            if ti >= len(rows):
+            if ti not in rows:
                 continue
             if not phones:
                 # a word the dictionary does not know. The note still has a
@@ -3812,7 +3894,7 @@ class Frame(wx.Frame):
             rows[ti] = project.fill(rows[ti], word, indices, phones)
             got += 1
         for ti, track in enumerate(self.tracks):
-            if ti < len(rows):
+            if ti in rows:
                 track.notes = [Note(ph, pitch, beats, word, bend)
                                for ph, pitch, beats, word, bend in rows[ti]]
         self.sync(select=0)

@@ -39,20 +39,27 @@ def split_phonemes(s):
 
 
 class Note(object):
-    __slots__ = ('tick', 'pitch', 'velocity', 'duration', 'text', 'phonemes')
+    __slots__ = ('tick', 'pitch', 'velocity', 'duration', 'text', 'phonemes',
+                 'channel')
 
-    def __init__(self, tick, pitch, velocity, duration, text='', phonemes=''):
+    def __init__(self, tick, pitch, velocity, duration, text='', phonemes='',
+                 channel=0):
         self.tick = tick
         self.pitch = pitch
         self.velocity = velocity
         self.duration = duration
         self.text = text
         self.phonemes = phonemes
+        #: One MIDI track can carry sixteen parts at once, one per channel --
+        #: a format 0 file always does, and plenty of format 1 files do too.
+        #: They are separate parts and want separating, so every note
+        #: remembers which one it belongs to.
+        self.channel = channel
 
     def __repr__(self):
-        return '<Note t=%d p=%d v=%d d=%d %r %r>' % (
+        return '<Note t=%d p=%d v=%d d=%d ch=%d %r %r>' % (
             self.tick, self.pitch, self.velocity, self.duration,
-            self.text, self.phonemes)
+            self.channel, self.text, self.phonemes)
 
 
 class Track(object):
@@ -69,6 +76,35 @@ class Track(object):
         #: [(tick, beats per bar, beat note)] -- 4/4 is (4, 4). The engine has
         #: no use for it; the editor does, to say which bar a note falls in.
         self.time_sigs = []
+        #: the same three lists with the channel kept, which is what
+        #: `on_channel` divides them by. The plain ones above are every
+        #: channel at once, which is right for a track that only has one.
+        self._bends = []
+        self._bend_range = []
+        self._programs = []
+
+    def channels(self):
+        """The channels this track has notes on, lowest first."""
+        return sorted({n.channel for n in self.notes})
+
+    def on_channel(self, chan):
+        """Just the part of this track that plays on one channel.
+
+        Everything that is the file's rather than the part's -- the tempo map
+        and the time signatures -- comes along, since it is as true of one
+        channel as of any other.
+        """
+        sub = Track(self.name)
+        sub.notes = [n for n in self.notes if n.channel == chan]
+        sub.tempos = list(self.tempos)
+        sub.time_sigs = list(self.time_sigs)
+        sub.bends = [(t, v) for t, v, c in self._bends if c == chan]
+        sub.bend_range = [(t, v) for t, v, c in self._bend_range if c == chan]
+        sub.programs = [(t, p) for t, p, c in self._programs if c == chan]
+        sub._bends = [e for e in self._bends if e[2] == chan]
+        sub._bend_range = [e for e in self._bend_range if e[2] == chan]
+        sub._programs = [e for e in self._programs if e[2] == chan]
+        return sub
 
 
 def _vlq(b, i):
@@ -105,7 +141,7 @@ class MidiFile(object):
     def _read_track(b):
         trk = Track()
         i, tick, running = 0, 0, None
-        rpn = (127, 127)
+        rpn = {}
         sounding = {}
         # text and lyric arrive at the same tick as their note, but not
         # necessarily before it, so they are collected and attached afterwards
@@ -141,32 +177,42 @@ class MidiFile(object):
                 i += ln
             else:
                 high = status & 0xF0
+                chan = status & 0x0F
                 if high == 0x90 and b[i + 1] > 0:
-                    sounding.setdefault(b[i], []).append((tick, b[i + 1]))
+                    sounding.setdefault((chan, b[i]), []).append(
+                        (tick, b[i + 1]))
                     i += 2
                 elif high == 0x80 or (high == 0x90 and b[i + 1] == 0):
-                    key = b[i]
+                    key = (chan, b[i])
                     if sounding.get(key):
                         start, vel = sounding[key].pop(0)
-                        trk.notes.append(Note(start, key, vel, tick - start))
+                        trk.notes.append(
+                            Note(start, b[i], vel, tick - start,
+                                 channel=chan))
                     i += 2
                 elif high == 0xE0:
-                    trk.bends.append(
-                        (tick, ((b[i + 1] << 7) | b[i]) - 8192))
+                    value = ((b[i + 1] << 7) | b[i]) - 8192
+                    trk.bends.append((tick, value))
+                    trk._bends.append((tick, value, chan))
                     i += 2
                 elif high == 0xB0:
                     # RPN 0 is pitch-bend sensitivity; VocalWriter changes it
-                    # mid-song (8, then 6, then 12 semitones in Daisy)
+                    # mid-song (8, then 6, then 12 semitones in Daisy). Each
+                    # channel selects its own RPN, so the selection is kept
+                    # per channel rather than for the track as a whole.
                     cc, val = b[i], b[i + 1]
-                    if cc == 6 and rpn == (0, 0):
+                    sel = rpn.get(chan, (127, 127))
+                    if cc == 6 and sel == (0, 0):
                         trk.bend_range.append((tick, val))
+                        trk._bend_range.append((tick, val, chan))
                     elif cc == 101:
-                        rpn = (val, rpn[1])
+                        rpn[chan] = (val, sel[1])
                     elif cc == 100:
-                        rpn = (rpn[0], val)
+                        rpn[chan] = (sel[0], val)
                     i += 2
                 elif high == 0xC0:
                     trk.programs.append((tick, b[i]))
+                    trk._programs.append((tick, b[i], chan))
                     i += 1
                 else:
                     i += 1 if high in (0xC0, 0xD0) else 2
@@ -195,8 +241,9 @@ def main():
         print()
         print('-- %r: %d notes --' % (t.name, len(t.notes)))
         for n in t.notes:
-            print('   t=%-6d p=%-3d v=%-3d d=%-4d %-9s %s'
-                  % (n.tick, n.pitch, n.velocity, n.duration, n.text, n.phonemes))
+            print('   t=%-6d p=%-3d v=%-3d d=%-4d ch=%-2d %-9s %s'
+                  % (n.tick, n.pitch, n.velocity, n.duration, n.channel,
+                     n.text, n.phonemes))
 
 
 if __name__ == '__main__':

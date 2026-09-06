@@ -78,8 +78,23 @@ Saving and exporting
 - Ctrl+S saves the song as a .vws file.
 - Ctrl+Shift+S writes the whole song to a WAV.
 - Ctrl+Shift+T writes one WAV per track.
-- Ctrl+I imports a MIDI file. If it has no words in it, every note is
-  given AA so you can hear the tune before typing anything.
+- Ctrl+I imports a MIDI file in place of the song you have open. If it
+  has no words in it, every note is given AA so you can hear the tune
+  before typing anything.
+- Ctrl+Shift+I imports one into the song you already have, as a new
+  track after the one you are on. That is the way to build a song a
+  part at a time: write the tune in a sequencer and bring it in, then
+  write the bass line and bring that in next to it. The song keeps its
+  own tempo and time signature.
+
+  Either way, a file with more than one part in it asks which you
+  want. Parts are listed in the order they are written in the file,
+  with the number of notes and the range each covers, because the
+  names are often no help -- Reaper calls every track after the plugin
+  on it, so four different parts all arrive called "ReaSynth".
+
+  A part that plays chords is brought in as the top note of each,
+  since a voice sings one note at a time.
 
 If it stops working
 
