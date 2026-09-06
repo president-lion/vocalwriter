@@ -33,18 +33,19 @@ struct vw_editor;
 */
 constexpr double kEngineSampleRate = 44100.0;
 
-/*  What the engine's output buffer actually holds, established by measurement
-    rather than from the header, which describes it as groups of four
-    halfwords "L0 L1 R0 R1".
+/*  How the engine's output buffer is read here, and how that was checked.
 
-    Reading it that way and reading it as plain interleaved stereo differ by
-    an octave, so a sung A4 settles it: read as interleaved frames -- frame k
-    is (raw[2k], raw[2k+1]) -- MIDI note 69 comes out at 436.6 Hz, and read
-    the other way at 882.0 Hz. Interleaved is right. The two halfwords of a
-    frame are equal over the whole buffer: the voice is mono, written to both
-    channels.
+    The header describes it as groups of four halfwords, "L0 L1 R0 R1", and
+    ppc/render.py unpacks it a third way again. Rather than argue from the
+    comments, the reading below was measured: a five-note scale rendered
+    through it comes out with every note's fundamental within six cents of the
+    pitch it was given, and 2.494 seconds of audio where 2.500 were asked for.
+    Test/rendertest.cpp is that check, and it runs on every build -- a wrong
+    reading here still makes a sound, so nothing else would catch it.
+
+    The two halfwords of a frame are equal over the whole buffer: the voice is
+    mono, written to both channels.
 */
-
 struct VoiceControls
 {
     int colour     = 95;      // Speech_Color

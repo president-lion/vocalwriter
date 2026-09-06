@@ -315,8 +315,8 @@ juce::AudioBuffer<float> VoiceEngine::render (const Part& part, int voiceIndex,
     if (raw == nullptr || halfwords <= 0)
         return empty;
 
-    /*  Interleaved stereo -- frame k is (raw[2k], raw[2k+1]) -- as the octave
-        test in the header says. */
+    /*  Frame k is (raw[2k], raw[2k+1]). See the header: this arrangement is
+        the one the scale in Test/rendertest.cpp confirms. */
     const int n = (int) (halfwords / 2);
     juce::AudioBuffer<float> out (2, n);
     auto* left = out.getWritePointer (0);
