@@ -34,6 +34,20 @@ struct Note
     bool isRest() const noexcept { return phonemes.empty() && word.isEmpty(); }
 };
 
+/*  Divide a word's syllables over exactly `count` notes, as evenly as they
+    go, keeping every syllable whole -- so a three-syllable word asked for two
+    notes gives two syllables then one, rather than breaking one in half.
+
+    This is ppc/phonology.py's `regroup`, which the Studio's lyric writer uses,
+    ported so that a line typed in one sings the same in the other. Asking for
+    more notes than the word has syllables gives one per syllable and no more:
+    the notes it does not reach are left alone rather than being filled with a
+    repeat of the last one, which would re-articulate its consonant on every
+    one of them.
+*/
+std::vector<std::vector<std::string>>
+regroup (const std::vector<std::vector<std::string>>& syllables, int count);
+
 struct Part
 {
     std::vector<Note> notes;    // in time order, no two overlapping

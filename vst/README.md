@@ -60,7 +60,12 @@ box:
 
 A syllable ending in a hyphen is half of a word: the halves are joined back
 together, looked up in VocalWriter's own dictionary once, and the pronunciation
-divided over the notes they came from. A word the dictionary does not know
+divided over the notes they came from by the same rule the Studio's own lyric
+writer (Ctrl+L) uses -- `ppc/phonology.py`'s `regroup`, ported in `Part.cpp`.
+Syllables are kept whole and shared out as evenly as they go, so a line typed
+in the Studio and a line typed here sing the same. A word hyphenated over more
+notes than it has syllables reaches only as many as it has, and the notes it
+does not reach are left alone rather than made to repeat its last syllable. A word the dictionary does not know
 sings the open vowel and keeps its text, so you can see which one it was. Notes
 with nothing typed for them sing `AA`, so a part with no words at all still
 makes a sound you can check the tune against.

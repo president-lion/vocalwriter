@@ -332,6 +332,7 @@ void VocalWriterVoiceProcessor::applyDictionary (Part& copy)
     /*  A syllable ending in a hyphen is half a word, so the halves are joined
         back together, looked up once, and the pronunciation divided over the
         notes they came from -- the way VocalWriter's own import does it. */
+    int unknownWords = 0, shortWords = 0;
     size_t i = 0;
     while (i < copy.notes.size())
     {
@@ -363,29 +364,32 @@ void VocalWriterVoiceProcessor::applyDictionary (Part& copy)
         {
             auto syllables = voice.wordSyllables (whole.retainCharacters (
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'"));
-            const size_t notes = last - i + 1;
-            for (size_t k = 0; k < notes; ++k)
+            const int notes = (int) (last - i + 1);
+
+            if (syllables.empty())
             {
-                auto& n = copy.notes[i + k];
-                if (k < syllables.size())
-                    n.phonemes = syllables[k];
-                else if (! syllables.empty())
-                    /*  More notes than the word has syllables: the last one is
-                        held over the rest, which is what singing a word over
-                        several notes means. */
-                    n.phonemes = syllables.back();
-                else
-                    /*  A word the dictionary does not know. The note still has
-                        a pitch and a length, so it sings the open vowel rather
-                        than falling silent, and the word stays on it to be
-                        seen. */
-                    n.phonemes = { "AA" };
+                /*  A word the dictionary does not know. Every note it was
+                    written over still has a pitch and a length, so they sing
+                    the open vowel rather than falling silent, and the word
+                    stays on them to be seen. */
+                for (size_t k = i; k <= last; ++k)
+                    copy.notes[k].phonemes = { "AA" };
+                ++unknownWords;
             }
-            /*  A word of more syllables than there are notes puts what is left
-                on the last one, so nothing of it is lost. */
-            for (size_t k = notes; k < syllables.size(); ++k)
-                for (auto& p : syllables[k])
-                    copy.notes[last].phonemes.push_back (p);
+            else
+            {
+                /*  Syllables kept whole and shared out as evenly as they go.
+                    A word with fewer syllables than the notes it was
+                    hyphenated over reaches only that many, and the rest are
+                    left as they were -- filling them with a repeat of the
+                    last syllable would re-articulate its consonant on every
+                    one of them, which is not what holding a word over several
+                    notes sounds like. */
+                auto groups = regroup (syllables, notes);
+                for (size_t k = 0; k < groups.size() && i + k <= last; ++k)
+                    copy.notes[i + k].phonemes = groups[k];
+                shortWords += juce::jmax (0, notes - (int) groups.size());
+            }
         }
         i = last + 1;
     }
@@ -393,8 +397,19 @@ void VocalWriterVoiceProcessor::applyDictionary (Part& copy)
     /*  Anything still with nothing on it sings the open vowel, so a part with
         no words at all arrives as something that can be heard. */
     for (auto& n : copy.notes)
-        if (n.phonemes.empty() && n.word.isEmpty() && n.velocity > 0)
+        if (n.phonemes.empty() && n.velocity > 0)
             n.phonemes = { "AA" };
+
+    juce::String trouble;
+    if (unknownWords > 0)
+        trouble << unknownWords << (unknownWords == 1 ? " word is" : " words are")
+                << " not in the dictionary";
+    if (shortWords > 0)
+        trouble << (trouble.isEmpty() ? "" : ", and ") << shortWords
+                << (shortWords == 1 ? " note was" : " notes were")
+                << " hyphenated past the end of their word";
+    if (trouble.isNotEmpty())
+        say (trouble + "; those notes sing AA");
 }
 
 // -- what the editor asks for ----------------------------------------------

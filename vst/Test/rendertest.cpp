@@ -88,6 +88,43 @@ int main (int argc, char** argv)
     if (syllables.empty())
         return fail ("the dictionary gave nothing back for \"twinkle\"");
 
+    // -- sharing a word out over notes -------------------------------------
+
+    {
+        struct Case { const char* word; int notes; const char* want; };
+        /*  What regroup should do: syllables kept whole, shared out as evenly
+            as they go, and never more groups than the word has syllables.
+            These are ppc/phonology.py's own answers, checked against it --
+            three syllables over two notes gives one then two, not two then
+            one, and a line typed in the Studio's lyric writer therefore sings
+            the same here. */
+        const Case cases[] = {
+            { "bicycle", 3, "bAY|sIH|kEL" },
+            { "bicycle", 2, "bAY|sIHkEL" },
+            { "bicycle", 1, "bAYsIHkEL" },
+            { "thousand", 2, "THAW|zENd" },   /* the syllabic n of "thousand" */
+            { "button",   2, "bUX|tEN" },
+            { "star",     3, "stAR" },        /* one syllable stays one note */
+        };
+        int bad = 0;
+        for (auto& c : cases)
+        {
+            auto groups = regroup (engine.wordSyllables (c.word), c.notes);
+            juce::String got;
+            for (size_t g = 0; g < groups.size(); ++g)
+            {
+                if (g > 0) got << "|";
+                for (auto& ph : groups[g]) got << ph;
+            }
+            const bool ok = got == juce::String (c.want);
+            std::printf ("  %-9s over %d: %-14s %s\n", c.word, c.notes,
+                         got.toRawUTF8(), ok ? "" : ("<-- wanted " + juce::String (c.want)).toRawUTF8());
+            if (! ok) ++bad;
+        }
+        if (bad > 0)
+            return fail (juce::String (bad) + " words were not divided as expected");
+    }
+
     // -- a scale, sung on AA ----------------------------------------------
 
     const int scale[] = { 57, 60, 64, 69, 72 };   // A3 C4 E4 A4 C5

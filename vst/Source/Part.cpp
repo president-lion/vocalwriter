@@ -2,6 +2,29 @@
 
 #include <algorithm>
 
+std::vector<std::vector<std::string>>
+regroup (const std::vector<std::vector<std::string>>& syllables, int count)
+{
+    const int parts = (int) syllables.size();
+    count = juce::jlimit (1, juce::jmax (1, parts), count);
+    if (parts == 0 || count == parts)
+        return syllables;
+
+    std::vector<std::vector<std::string>> out;
+    int at = 0;
+    for (int k = 0; k < count; ++k)
+    {
+        const int take = (parts - at) / (count - k);
+        std::vector<std::string> group;
+        for (int p = at; p < at + take; ++p)
+            group.insert (group.end(), syllables[(size_t) p].begin(),
+                          syllables[(size_t) p].end());
+        out.push_back (std::move (group));
+        at += take;
+    }
+    return out;
+}
+
 void Part::makeMonophonic()
 {
     std::stable_sort (notes.begin(), notes.end(),
